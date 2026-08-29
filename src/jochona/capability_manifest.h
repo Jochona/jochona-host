@@ -1,0 +1,30 @@
+/**
+ * @file src/jochona/capability_manifest.h
+ * @brief Builds the JSON body for `GET /jochona/v1/capabilities`, schema 1.0.
+ *
+ * The shape produced here matches
+ * docs/protocols/jochona-host-capabilities.md exactly; see that document for
+ * the normative field-by-field description.
+ */
+#pragma once
+
+// lib includes
+#include <nlohmann/json.hpp>
+
+// local includes
+#include "capabilities.h"
+
+namespace jochona::manifest {
+
+  /**
+   * @brief Build the full capabilities manifest for the given permission grant.
+   *
+   * Reads live state only: the currently running application
+   * (proc::proc.running()), the proven-tuple store
+   * (jochona::encoder::store_t), the display-adapter's actual probed status
+   * (jochona::display_adapter::client_t), and the real host-volume control
+   * status (jochona::host_volume). Nothing here is a static placeholder.
+   */
+  nlohmann::json build(const capability::permission_set_t &permissions);
+
+}  // namespace jochona::manifest

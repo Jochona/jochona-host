@@ -25,6 +25,7 @@
 #include "config.h"
 #include "crypto.h"
 #include "display_device.h"
+#include "jochona/launch_tuple.h"
 #include "logging.h"
 #include "platform/common.h"
 #include "process.h"
@@ -361,6 +362,7 @@ namespace proc {
 #endif
 
       display_device::revert_configuration();
+      jochona::launch::release_active_virtual_display_lease();
     }
 
     _app_id = -1;

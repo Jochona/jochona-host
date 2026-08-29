@@ -24,6 +24,7 @@ extern "C" {
 #include "display_device.h"
 #include "globals.h"
 #include "input.h"
+#include "jochona/launch_tuple.h"
 #include "logging.h"
 #include "network.h"
 #include "platform/common.h"
@@ -2195,6 +2196,7 @@ namespace stream {
 
         if (revert_display_config) {
           display_device::revert_configuration();
+          jochona::launch::release_active_virtual_display_lease();
         }
 
         platf::streaming_will_stop();

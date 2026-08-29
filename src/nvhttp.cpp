@@ -17,6 +17,7 @@
 #include <boost/property_tree/json_parser.hpp>
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/xml_parser.hpp>
+#include <nlohmann/json.hpp>
 #include <Simple-Web-Server/server_http.hpp>
 
 // local includes
@@ -25,6 +26,9 @@
 #include "file_handler.h"
 #include "globals.h"
 #include "httpcommon.h"
+#include "jochona/capabilities.h"
+#include "jochona/capability_manifest.h"
+#include "jochona/launch_tuple.h"
 #include "logging.h"
 #include "network.h"
 #include "nvhttp.h"
@@ -982,6 +986,29 @@ namespace nvhttp {
   }
 
   /**
+   * @brief Build and return the authenticated Jochona capabilities manifest.
+   *
+   * Reachable only through the mTLS-authenticated HTTPS listener; the TLS
+   * verify callback already rejects any client whose certificate is not a
+   * paired, enabled GameStream client before this handler runs, so every
+   * request that reaches this point always receives the default full
+   * control grant described in docs/protocols/jochona-host-capabilities.md.
+   *
+   * @param response HTTP response object to populate.
+   * @param request HTTP request data from the client.
+   */
+  void jochona_capabilities(resp_https_t response, req_https_t request) {
+    print_req<SunshineHTTPS>(request);
+
+    auto body = jochona::manifest::build(jochona::capability::permission_set_t::default_paired_client_grant());
+
+    SimpleWeb::CaseInsensitiveMultimap headers;
+    headers.emplace("Content-Type", "application/json");
+    response->write(SimpleWeb::StatusCode::success_ok, body.dump(), headers);
+    response->close_connection_after_response = true;
+  }
+
+  /**
    * @brief Launch the requested application for a GameStream session.
    *
    * @param host_audio Host audio.
@@ -993,21 +1020,36 @@ namespace nvhttp {
 
     pt::ptree tree;
     bool revert_display_configuration {false};
+    bool responded_out_of_band {false};
     auto g = util::fail_guard([&]() {
-      std::ostringstream data;
+      if (!responded_out_of_band) {
+        std::ostringstream data;
 
-      if (tree.empty()) {
-        BOOST_LOG(error) << EMPTY_PROPERTY_TREE_ERROR_MSG;
+        if (tree.empty()) {
+          BOOST_LOG(error) << EMPTY_PROPERTY_TREE_ERROR_MSG;
+        }
+
+        pt::write_xml(data, tree);
+        response->write(data.str());
+        response->close_connection_after_response = true;
       }
-
-      pt::write_xml(data, tree);
-      response->write(data.str());
-      response->close_connection_after_response = true;
 
       if (revert_display_configuration) {
         display_device::revert_configuration();
+        jochona::launch::release_active_virtual_display_lease();
       }
     });
+
+    // Writes a structured Jochona rejection body with a real HTTP 409 status,
+    // bypassing the baseline XML response entirely per
+    // docs/protocols/jochona-host-capabilities.md's "Session request" contract.
+    auto respond_jochona_rejection = [&](const jochona::launch::tuple_rejection_t &rejection) {
+      SimpleWeb::CaseInsensitiveMultimap headers;
+      headers.emplace("Content-Type", "application/json");
+      response->write(SimpleWeb::StatusCode::client_error_conflict, jochona::launch::to_json(rejection), headers);
+      response->close_connection_after_response = true;
+      responded_out_of_band = true;
+    };
 
     auto args = request->parse_query_string();
     if (
@@ -1024,8 +1066,14 @@ namespace nvhttp {
     }
 
     auto appid = util::from_view(get_arg(args, "appid"));
+    auto requested_jochona_tuple = args.find("jochonaTuple"s);
+    bool virtual_display_requested = util::from_view(get_arg(args, "virtualDisplay", "0"));
 
     auto current_appid = proc::proc.running();
+    if (requested_jochona_tuple != std::end(args) && (current_appid > 0 || rtsp_stream::session_count() > 0)) {
+      respond_jochona_rejection(jochona::launch::host_busy_rejection());
+      return;
+    }
     if (current_appid > 0) {
       tree.put("root.resume", 0);
       tree.put("root.<xmlattr>.status_code", 400);
@@ -1040,6 +1088,13 @@ namespace nvhttp {
     if (rtsp_stream::session_count() == 0) {
       // The display should be restored in case something fails as there are no other sessions.
       revert_display_configuration = true;
+
+      if (virtual_display_requested) {
+        if (auto rejection = jochona::launch::acquire_virtual_display_for_session(*launch_session)) {
+          respond_jochona_rejection(*rejection);
+          return;
+        }
+      }
 
       // We want to prepare display only if there are no active sessions at
       // the moment. This should be done before probing encoders as it could
@@ -1057,6 +1112,14 @@ namespace nvhttp {
 
         return;
       }
+
+      jochona::launch::record_probe_success(
+        static_cast<uint32_t>(launch_session->width),
+        static_cast<uint32_t>(launch_session->height),
+        static_cast<uint32_t>(launch_session->fps),
+        launch_session->enable_hdr,
+        virtual_display_requested
+      );
     }
 
     auto encryption_mode = net::encryption_mode_for_address(request->remote_endpoint().address());
@@ -1068,6 +1131,13 @@ namespace nvhttp {
       tree.put("root.gamesession", 0);
 
       return;
+    }
+
+    if (requested_jochona_tuple != std::end(args)) {
+      if (auto rejection = jochona::launch::resolve_requested_tuple(requested_jochona_tuple->second, *launch_session, virtual_display_requested)) {
+        respond_jochona_rejection(*rejection);
+        return;
+      }
     }
 
     if (appid > 0) {
@@ -1110,17 +1180,36 @@ namespace nvhttp {
     print_req<SunshineHTTPS>(request);
 
     pt::ptree tree;
+    bool revert_virtual_display_lease {false};
+    bool responded_out_of_band {false};
     auto g = util::fail_guard([&]() {
-      std::ostringstream data;
+      if (!responded_out_of_band) {
+        std::ostringstream data;
 
-      if (tree.empty()) {
-        BOOST_LOG(error) << EMPTY_PROPERTY_TREE_ERROR_MSG;
+        if (tree.empty()) {
+          BOOST_LOG(error) << EMPTY_PROPERTY_TREE_ERROR_MSG;
+        }
+
+        pt::write_xml(data, tree);
+        response->write(data.str());
+        response->close_connection_after_response = true;
       }
 
-      pt::write_xml(data, tree);
-      response->write(data.str());
-      response->close_connection_after_response = true;
+      if (revert_virtual_display_lease) {
+        jochona::launch::release_active_virtual_display_lease();
+      }
     });
+
+    // Writes a structured Jochona rejection body with a real HTTP 409 status,
+    // bypassing the baseline XML response entirely per
+    // docs/protocols/jochona-host-capabilities.md's "Session request" contract.
+    auto respond_jochona_rejection = [&](const jochona::launch::tuple_rejection_t &rejection) {
+      SimpleWeb::CaseInsensitiveMultimap headers;
+      headers.emplace("Content-Type", "application/json");
+      response->write(SimpleWeb::StatusCode::client_error_conflict, jochona::launch::to_json(rejection), headers);
+      response->close_connection_after_response = true;
+      responded_out_of_band = true;
+    };
 
     auto current_appid = proc::proc.running();
     if (current_appid == 0) {
@@ -1143,16 +1232,31 @@ namespace nvhttp {
       return;
     }
 
+    auto requested_jochona_tuple = args.find("jochonaTuple"s);
+    bool virtual_display_requested = util::from_view(get_arg(args, "virtualDisplay", "0"));
+
     // Newer Moonlight clients send localAudioPlayMode on /resume too,
     // so we should use it if it's present in the args and there are
     // no active sessions we could be interfering with.
     const bool no_active_sessions {rtsp_stream::session_count() == 0};
+    if (requested_jochona_tuple != std::end(args) && !no_active_sessions) {
+      respond_jochona_rejection(jochona::launch::host_busy_rejection());
+      return;
+    }
     if (no_active_sessions && args.find("localAudioPlayMode"s) != std::end(args)) {
       host_audio = util::from_view(get_arg(args, "localAudioPlayMode"));
     }
     const auto launch_session = make_launch_session(host_audio, args);
 
     if (no_active_sessions) {
+      if (virtual_display_requested && !jochona::launch::virtual_display_lease_active()) {
+        if (auto rejection = jochona::launch::acquire_virtual_display_for_session(*launch_session)) {
+          respond_jochona_rejection(*rejection);
+          return;
+        }
+        revert_virtual_display_lease = true;
+      }
+
       // We want to prepare display only if there are no active sessions at
       // the moment. This should be done before probing encoders as it could
       // change the active displays.
@@ -1169,6 +1273,14 @@ namespace nvhttp {
 
         return;
       }
+
+      jochona::launch::record_probe_success(
+        static_cast<uint32_t>(launch_session->width),
+        static_cast<uint32_t>(launch_session->height),
+        static_cast<uint32_t>(launch_session->fps),
+        launch_session->enable_hdr,
+        virtual_display_requested
+      );
     }
 
     auto encryption_mode = net::encryption_mode_for_address(request->remote_endpoint().address());
@@ -1180,6 +1292,13 @@ namespace nvhttp {
       tree.put("root.gamesession", 0);
 
       return;
+    }
+
+    if (requested_jochona_tuple != std::end(args)) {
+      if (auto rejection = jochona::launch::resolve_requested_tuple(requested_jochona_tuple->second, *launch_session, virtual_display_requested)) {
+        respond_jochona_rejection(*rejection);
+        return;
+      }
     }
 
     tree.put("root.<xmlattr>.status_code", 200);
@@ -1195,6 +1314,10 @@ namespace nvhttp {
     tree.put("root.resume", 1);
 
     rtsp_stream::launch_session_raise(launch_session);
+
+    // Stream resumed successfully; retain the virtual-display lease for the
+    // session's lifetime instead of releasing it in the fail guard.
+    revert_virtual_display_lease = false;
   }
 
   /**
@@ -1226,6 +1349,7 @@ namespace nvhttp {
 
     // The config needs to be reverted regardless of whether "proc::proc.terminate()" was called or not.
     display_device::revert_configuration();
+    jochona::launch::release_active_virtual_display_lease();
   }
 
   /**
@@ -1370,6 +1494,7 @@ namespace nvhttp {
       resume(host_audio, resp, req);
     };
     https_server.resource["^/cancel$"]["GET"] = cancel;
+    https_server.resource["^/jochona/v1/capabilities$"]["GET"] = jochona_capabilities;
 
     https_server.config.reuse_address = true;
     https_server.config.address = net::get_bind_address(address_family);

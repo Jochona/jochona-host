@@ -1427,6 +1427,17 @@ namespace video {
   std::array<bool, 3> last_encoder_probe_supported_yuv444_for_codec = {};  ///< YUV444 support discovered for each probed codec.
 
   /**
+   * @brief Name of the encoder backend chosen by the most recent successful probe.
+   *
+   * @return The chosen encoder's name, or an empty view if no probe has
+   *         succeeded yet (e.g. before the first launch, or after a
+   *         failed probe).
+   */
+  std::string_view current_encoder_name() {
+    return chosen_encoder ? chosen_encoder->name : std::string_view {};
+  }
+
+  /**
    * @brief Recreate a display capture object after a capture failure.
    *
    * @param disp Display connection or display handle.
@@ -3009,6 +3020,23 @@ namespace video {
     }
 
     return flag;
+  }
+
+  bool probe_encoder_config(const config_t &config) {
+    if (!chosen_encoder) {
+      return false;
+    }
+
+    const auto output_name {display_device::map_output_name(config::video.output_name)};
+    std::shared_ptr<platf::display_t> display;
+    reset_display(display, chosen_encoder->platform_formats->dev_type, output_name, config);
+    if (!display) {
+      return false;
+    }
+
+    const auto codec_name = chosen_encoder->codec_from_config(config).name;
+    return display->is_codec_supported(codec_name, config) &&
+           validate_config(display, *chosen_encoder, config) >= 0;
   }
 
   /**

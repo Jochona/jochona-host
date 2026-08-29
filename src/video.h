@@ -615,6 +615,12 @@ namespace video {
   extern bool last_encoder_probe_supported_ref_frames_invalidation;
   extern std::array<bool, 3> last_encoder_probe_supported_yuv444_for_codec;  // 0 - H.264, 1 - HEVC, 2 - AV1
 
+  /**
+   * @brief Name of the encoder backend chosen by the most recent successful probe.
+   * @return The chosen encoder's name, or an empty view if no probe has succeeded yet.
+   */
+  std::string_view current_encoder_name();
+
   void capture(
     safe::mail_t mail,
     config_t config,
@@ -640,6 +646,15 @@ namespace video {
    * @return 0 when a usable encoder is selected; nonzero when probing fails.
    */
   int probe_encoders();
+
+  /**
+   * @brief Encode probe frames for one exact stream configuration with the
+   *        encoder selected by probe_encoders().
+   *
+   * @param config Exact codec, mode, dynamic-range, and chroma configuration.
+   * @return True only when the selected capture and encoder path produces an IDR frame.
+   */
+  bool probe_encoder_config(const config_t &config);
 
   // Several NTSC standard refresh rates are hardcoded here, because their
   // true rate requires a denominator of 1001. ffmpeg's av_d2q() would assume it could
