@@ -6,8 +6,13 @@
 #define BOOST_BIND_GLOBAL_PLACEHOLDERS
 
 // standard includes
+#include <algorithm>
+#include <array>
+#include <cctype>
+#include <charconv>
 #include <filesystem>
 #include <format>
+#include <limits>
 #include <string>
 #include <utility>
 
@@ -28,6 +33,7 @@
 #include "httpcommon.h"
 #include "jochona/capabilities.h"
 #include "jochona/capability_manifest.h"
+#include "jochona/host_volume.h"
 #include "jochona/launch_tuple.h"
 #include "logging.h"
 #include "network.h"
@@ -164,6 +170,15 @@ namespace nvhttp {
     std::string uuid;  ///< Persistent Moonlight client UUID associated with the certificate.
     std::string cert;  ///< Certificate PEM string or path.
     bool enabled = true;  ///< Whether this persisted client entry may connect.
+
+    /**
+     * @brief True for a Beacon-style observer-only enrollment: this
+     *        certificate is granted `jochona::capability::permission_e::
+     *        host_observe` alone (read-only /serverinfo and capabilities/
+     *        capacity) and is denied session launch/resume/cancel,
+     *        applist, and host-volume control.
+     */
+    bool observer_only = false;
   };
 
   /**
@@ -258,6 +273,7 @@ namespace nvhttp {
       named_cert_node.put("cert"s, named_cert.cert);
       named_cert_node.put("uuid"s, named_cert.uuid);
       named_cert_node.put("enabled"s, named_cert.enabled);
+      named_cert_node.put("observer_only"s, named_cert.observer_only);
       named_cert_nodes.push_back(std::make_pair(""s, named_cert_node));
     }
     root.add_child("root.named_devices"s, named_cert_nodes);
@@ -325,6 +341,7 @@ namespace nvhttp {
         named_cert.cert = el.get_child("cert").get_value<std::string>();
         named_cert.uuid = el.get_child("uuid").get_value<std::string>();
         named_cert.enabled = el.get<bool>("enabled", true);
+        named_cert.observer_only = el.get<bool>("observer_only", false);
         client.named_devices.emplace_back(named_cert);
       }
     }
@@ -343,13 +360,17 @@ namespace nvhttp {
    *
    * @param name Human-readable name to assign.
    * @param cert Certificate data or object used by the operation.
+   * @param observer_only True to persist a Beacon-style observer-only
+   *        enrollment (`host.observe` only) instead of the default
+   *        full-control grant.
    */
-  void add_authorized_client(const std::string &name, std::string &&cert) {
+  void add_authorized_client(const std::string &name, std::string &&cert, bool observer_only = false) {
     client_t &client = client_root;
     named_cert_t named_cert;
     named_cert.name = name;
     named_cert.cert = std::move(cert);
     named_cert.uuid = uuid_util::uuid_t::generate().string();
+    named_cert.observer_only = observer_only;
     client.named_devices.emplace_back(named_cert);
 
     if (!config::sunshine.flags[config::flag::FRESH_STATE]) {
@@ -607,7 +628,7 @@ namespace nvhttp {
       add_cert->raise(crypto::x509(client.cert));
 
       // The client is now successfully paired and will be authorized to connect
-      add_authorized_client(client.name, std::move(client.cert));
+      add_authorized_client(client.name, std::move(client.cert), client.observer_only);
     } else {
       tree.put("root.paired", 0);
     }
@@ -642,21 +663,53 @@ namespace nvhttp {
    */
   template<class T>
   void print_req(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Request> request) {
-    BOOST_LOG(debug) << "TUNNEL :: "sv << tunnel<T>::to_string;
+    auto lower_name = [](std::string_view name) {
+      std::string lower {name};
+      std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+      });
+      return lower;
+    };
+    static constexpr std::array<std::string_view, 3> sensitive_headers {
+      "authorization",
+      "cookie",
+      "set-cookie"
+    };
+    static constexpr std::array<std::string_view, 10> sensitive_queries {
+      "uniqueid",
+      "uuid",
+      "salt",
+      "clientcert",
+      "clientchallenge",
+      "serverchallengeresp",
+      "clientpairingsecret",
+      "rikey",
+      "rikeyid",
+      "pin"
+    };
 
+    BOOST_LOG(debug) << "TUNNEL :: "sv << tunnel<T>::to_string;
     BOOST_LOG(debug) << "METHOD :: "sv << request->method;
     BOOST_LOG(debug) << "DESTINATION :: "sv << request->path;
 
     for (auto &[name, val] : request->header) {
-      BOOST_LOG(debug) << name << " -- " << val;
+      const auto lower = lower_name(name);
+      if (std::ranges::find(sensitive_headers, lower) != sensitive_headers.end()) {
+        BOOST_LOG(debug) << name << " -- <redacted>";
+      } else {
+        BOOST_LOG(debug) << name << " -- " << val;
+      }
     }
 
     BOOST_LOG(debug) << " [--] "sv;
-
     for (auto &[name, val] : request->parse_query_string()) {
-      BOOST_LOG(debug) << name << " -- " << val;
+      const auto lower = lower_name(name);
+      if (std::ranges::find(sensitive_queries, lower) != sensitive_queries.end()) {
+        BOOST_LOG(debug) << name << " -- <redacted>";
+      } else {
+        BOOST_LOG(debug) << name << " -- " << val;
+      }
     }
-
     BOOST_LOG(debug) << " [--] "sv;
   }
 
@@ -724,7 +777,15 @@ namespace nvhttp {
         sess.client.uniqueID = std::move(uniqID);
         sess.client.cert = util::from_hex_vec(get_arg(args, "clientcert"), true);
 
-        BOOST_LOG(debug) << sess.client.cert;
+        // Jochona: an explicit, operator-approved request for Beacon-style
+        // observer-only enrollment (host.observe only; no session/volume
+        // control), per the cross-repo pairing contract coordinated with
+        // Beacon (src/crypto/gamestream_pairing.rs). Absent (or any other
+        // value) for every standard Moonlight/Jochona Client pairing
+        // request, which continues to receive the full-control grant once
+        // the operator approves the pairing PIN below.
+        sess.client.observer_only = get_arg(args, "jochona_permission", "") == "observer_only"s;
+
         auto ptr = map_id_sess.emplace(sess.client.uniqueID, std::move(sess)).first;
 
         ptr->second.async_insert_pin.salt = std::move(get_arg(args, "salt"));
@@ -861,6 +922,46 @@ namespace nvhttp {
     return codec_mode_flags;
   }
 
+  bool is_observer_only_cert(std::string_view cert) {
+    for (const auto &named_cert : client_root.named_devices) {
+      if (named_cert.cert == cert) {
+        return named_cert.observer_only;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * @brief True if the certificate that TLS-authenticated the current
+   *        request is a persisted Beacon-style observer-only enrollment.
+   *
+   * Reads `last_verified_client_cert`, set by the HTTPS verify callback for
+   * the certificate that authenticated this request; safe to read from any
+   * handler since the HTTPS server processes one request at a time. Every
+   * handler that can mutate session/app state or return non-public app
+   * inventory data MUST check this immediately after print_req() -- see
+   * the observer-coverage table above the route table in start().
+   */
+  bool is_observer_only_client() {
+    return is_observer_only_cert(last_verified_client_cert);
+  }
+
+  /**
+   * @brief Canonical Jochona permission grant for the certificate that
+   *        TLS-authenticated the current request.
+   *
+   * `observer_grant()` for a persisted observer-only enrollment,
+   * `default_paired_client_grant()` otherwise -- including when the
+   * certificate cannot be found in the paired-client list, which preserves
+   * the full-control default every client received before this feature
+   * existed.
+   */
+  jochona::capability::permission_set_t jochona_permission_grant_for_current_client() {
+    return is_observer_only_client() ?
+             jochona::capability::permission_set_t::observer_grant() :
+             jochona::capability::permission_set_t::default_paired_client_grant();
+  }
+
   /**
    * @brief Build the GameStream server-info response.
    *
@@ -927,8 +1028,19 @@ namespace nvhttp {
 
     auto current_appid = proc::proc.running();
     tree.put("root.PairStatus", pair_status);
-    tree.put("root.currentgame", current_appid);
     tree.put("root.state", current_appid > 0 ? "SUNSHINE_SERVER_BUSY" : "SUNSHINE_SERVER_FREE");
+
+    // Jochona family/permission markers consumed by Beacon (see the
+    // cross-repo pairing contract in src/crypto/gamestream_pairing.rs and
+    // src/observer/permission.rs): jochona_family identifies this Host as
+    // Jochona family regardless of pairing state so Beacon can detect it
+    // before ever pairing; jochona_permission reports the authenticated
+    // requester's actual grant and is only meaningful -- and only emitted
+    // -- once the TLS layer has resolved a real client certificate.
+    tree.put("root.jochona_family", 1);
+    if constexpr (std::is_same_v<SunshineHTTPS, T>) {
+      tree.put("root.jochona_permission", is_observer_only_client() ? "observer_only" : "full_control");
+    }
 
     std::ostringstream data;
 
@@ -945,6 +1057,7 @@ namespace nvhttp {
       named_cert_node["name"] = named_cert.name;
       named_cert_node["uuid"] = named_cert.uuid;
       named_cert_node["enabled"] = named_cert.enabled;
+      named_cert_node["observer_only"] = named_cert.observer_only;
       named_cert_nodes.push_back(named_cert_node);
     }
 
@@ -970,6 +1083,13 @@ namespace nvhttp {
       response->close_connection_after_response = true;
     });
 
+    if (is_observer_only_client()) {
+      tree.put("root.<xmlattr>.status_code", 403);
+      tree.put("root.<xmlattr>.status_message", "This client is authorized for observation only");
+
+      return;
+    }
+
     auto &apps = tree.add_child("root", pt::ptree {});
 
     apps.put("<xmlattr>.status_code", 200);
@@ -990,9 +1110,11 @@ namespace nvhttp {
    *
    * Reachable only through the mTLS-authenticated HTTPS listener; the TLS
    * verify callback already rejects any client whose certificate is not a
-   * paired, enabled GameStream client before this handler runs, so every
-   * request that reaches this point always receives the default full
-   * control grant described in docs/protocols/jochona-host-capabilities.md.
+   * paired, enabled GameStream client before this handler runs. The
+   * returned manifest's `permissions` reflect that specific certificate's
+   * persisted grant: `observer_grant()` for a Beacon-style observer-only
+   * enrollment, `default_paired_client_grant()` for every other paired
+   * client, per docs/protocols/jochona-host-capabilities.md.
    *
    * @param response HTTP response object to populate.
    * @param request HTTP request data from the client.
@@ -1000,10 +1122,216 @@ namespace nvhttp {
   void jochona_capabilities(resp_https_t response, req_https_t request) {
     print_req<SunshineHTTPS>(request);
 
-    auto body = jochona::manifest::build(jochona::capability::permission_set_t::default_paired_client_grant());
+    auto body = jochona::manifest::build(jochona_permission_grant_for_current_client());
 
     SimpleWeb::CaseInsensitiveMultimap headers;
     headers.emplace("Content-Type", "application/json");
+    response->write(SimpleWeb::StatusCode::success_ok, body.dump(), headers);
+    response->close_connection_after_response = true;
+  }
+
+  /**
+   * @brief Return the current Host output-volume status.
+   *
+   * Reachable only through the mTLS-authenticated HTTPS listener; denied
+   * for a Beacon-style observer-only certificate, which is not granted
+   * `host.volume.read`.
+   *
+   * @param response HTTP response object to populate.
+   * @param request HTTP request data from the client.
+   */
+  void jochona_volume_get(resp_https_t response, req_https_t request) {
+    print_req<SunshineHTTPS>(request);
+
+    SimpleWeb::CaseInsensitiveMultimap headers;
+    headers.emplace("Content-Type", "application/json");
+
+    if (is_observer_only_client()) {
+      nlohmann::json body;
+      body["error"] = "forbidden";
+      body["detail"] = "This client is authorized for observation only";
+      response->write(SimpleWeb::StatusCode::client_error_forbidden, body.dump(), headers);
+      response->close_connection_after_response = true;
+      return;
+    }
+
+    auto status = jochona::host_volume::get();
+    response->write(SimpleWeb::StatusCode::success_ok, jochona::host_volume::to_json(status).dump(), headers);
+    response->close_connection_after_response = true;
+  }
+
+  /**
+   * @brief Set the Host output volume to an exact requested level.
+   *
+   * Reachable only through the mTLS-authenticated HTTPS listener; denied
+   * for a Beacon-style observer-only certificate, which is not granted
+   * `host.volume.write`.
+   *
+   * @param response HTTP response object to populate.
+   * @param request HTTP request data from the client.
+   */
+  void jochona_volume_set(resp_https_t response, req_https_t request) {
+    print_req<SunshineHTTPS>(request);
+
+    SimpleWeb::CaseInsensitiveMultimap headers;
+    headers.emplace("Content-Type", "application/json");
+
+    auto respond_error = [&](SimpleWeb::StatusCode status_code, const std::string &error, const std::string &detail) {
+      nlohmann::json body;
+      body["error"] = error;
+      body["detail"] = detail;
+      response->write(status_code, body.dump(), headers);
+      response->close_connection_after_response = true;
+    };
+
+    if (is_observer_only_client()) {
+      respond_error(SimpleWeb::StatusCode::client_error_forbidden, "forbidden", "This client is authorized for observation only");
+      return;
+    }
+
+    auto args = request->parse_query_string();
+    auto it = args.find("level"s);
+    if (it == std::end(args)) {
+      respond_error(SimpleWeb::StatusCode::client_error_bad_request, "invalid_parameter", "Missing required 'level' query parameter.");
+      return;
+    }
+
+    int level = 0;
+    auto parse_result = std::from_chars(it->second.data(), it->second.data() + it->second.size(), level);
+    if (parse_result.ec != std::errc {} || parse_result.ptr != it->second.data() + it->second.size() || level < 0 || level > 100) {
+      respond_error(SimpleWeb::StatusCode::client_error_bad_request, "invalid_parameter", "The 'level' query parameter must be an integer in [0, 100].");
+      return;
+    }
+
+    if (!jochona::host_volume::set(level)) {
+      respond_error(SimpleWeb::StatusCode::client_error_conflict, "host_volume_unavailable", "Host volume control is unavailable on this platform, or the platform call failed.");
+      return;
+    }
+
+    auto status = jochona::host_volume::get();
+    response->write(SimpleWeb::StatusCode::success_ok, jochona::host_volume::to_json(status).dump(), headers);
+    response->close_connection_after_response = true;
+  }
+
+  /**
+   * @brief Prove one exact encoder tuple outside of a live session.
+   *
+   * Breaks the first-launch bootstrap deadlock: a fresh Host has no proven
+   * tuples until a session has actually launched once, but Jochona Client
+   * refuses to launch without a matching advertised tuple. Reachable only
+   * through the mTLS-authenticated HTTPS listener; denied for a
+   * Beacon-style observer-only certificate, since probing reconfigures
+   * live display/capture state.
+   *
+   * @param response HTTP response object to populate.
+   * @param request HTTP request data from the client.
+   */
+  void jochona_probe(resp_https_t response, req_https_t request) {
+    print_req<SunshineHTTPS>(request);
+
+    SimpleWeb::CaseInsensitiveMultimap headers;
+    headers.emplace("Content-Type", "application/json");
+
+    auto respond_invalid = [&](const std::string &detail) {
+      nlohmann::json body;
+      body["error"] = "invalid_parameter";
+      body["detail"] = detail;
+      response->write(SimpleWeb::StatusCode::client_error_bad_request, body.dump(), headers);
+      response->close_connection_after_response = true;
+    };
+
+    if (is_observer_only_client()) {
+      nlohmann::json body;
+      body["error"] = "forbidden";
+      body["detail"] = "This client is authorized for observation only";
+      response->write(SimpleWeb::StatusCode::client_error_forbidden, body.dump(), headers);
+      response->close_connection_after_response = true;
+      return;
+    }
+
+    auto args = request->parse_query_string();
+
+    static constexpr std::array<std::string_view, 3> valid_codecs {"h264", "hevc", "av1"};
+    static constexpr std::array<std::string_view, 2> valid_profiles {"main8", "main10"};
+    static constexpr std::array<std::string_view, 2> valid_chromas {"420", "444"};
+    static constexpr std::array<std::string_view, 2> valid_captures {"physical", "virtual"};
+
+    auto codec = get_arg(args, "codec", "");
+    auto profile = get_arg(args, "profile", "");
+    auto chroma = get_arg(args, "chroma", "");
+    auto capture = get_arg(args, "capture", "");
+
+    if (std::find(valid_codecs.begin(), valid_codecs.end(), codec) == valid_codecs.end()) {
+      respond_invalid("The 'codec' query parameter must be one of h264, hevc, av1.");
+      return;
+    }
+    if (std::find(valid_profiles.begin(), valid_profiles.end(), profile) == valid_profiles.end()) {
+      respond_invalid("The 'profile' query parameter must be one of main8, main10.");
+      return;
+    }
+    if (std::find(valid_chromas.begin(), valid_chromas.end(), chroma) == valid_chromas.end()) {
+      respond_invalid("The 'chroma' query parameter must be one of 420, 444.");
+      return;
+    }
+    if (std::find(valid_captures.begin(), valid_captures.end(), capture) == valid_captures.end()) {
+      respond_invalid("The 'capture' query parameter must be one of physical, virtual.");
+      return;
+    }
+
+    auto parse_positive_uint = [&](const char *name, std::uint32_t &out) {
+      auto it = args.find(name);
+      if (it == std::end(args)) {
+        return false;
+      }
+      auto result = std::from_chars(it->second.data(), it->second.data() + it->second.size(), out);
+      return result.ec == std::errc {} && result.ptr == it->second.data() + it->second.size() && out > 0 && out <= static_cast<std::uint32_t>(std::numeric_limits<int>::max());
+    };
+
+    jochona::launch::exact_tuple_shape_t shape;
+    shape.codec = codec;
+    shape.profile = profile;
+    shape.chroma = chroma;
+    if (!parse_positive_uint("width", shape.width)) {
+      respond_invalid("The 'width' query parameter must be a positive integer.");
+      return;
+    }
+    if (!parse_positive_uint("height", shape.height)) {
+      respond_invalid("The 'height' query parameter must be a positive integer.");
+      return;
+    }
+    if (!parse_positive_uint("fps", shape.fps)) {
+      respond_invalid("The 'fps' query parameter must be a positive integer.");
+      return;
+    }
+    auto hdr = get_arg(args, "hdr", "");
+    if (hdr != "0"sv && hdr != "1"sv) {
+      respond_invalid("The 'hdr' query parameter must be either 0 or 1.");
+      return;
+    }
+    if (codec == "h264"sv && profile != "main8"sv) {
+      respond_invalid("H.264 supports only the main8 profile.");
+      return;
+    }
+    shape.hdr = hdr == "1"sv;
+
+    auto result = jochona::launch::probe_exact_tuple(shape, capture == "virtual"sv);
+
+    if (auto *rejection = std::get_if<jochona::launch::tuple_rejection_t>(&result)) {
+      response->write(SimpleWeb::StatusCode::client_error_conflict, jochona::launch::to_json(*rejection), headers);
+      response->close_connection_after_response = true;
+      return;
+    }
+
+    auto &tuple_id = std::get<std::string>(result);
+    auto proven = jochona::encoder::store_t::instance().find(tuple_id);
+    if (!proven) {
+      // Unreachable in practice: probe_exact_tuple() just recorded this id.
+      BOOST_LOG(error) << "Jochona: probed tuple '"sv << tuple_id << "' vanished from the store immediately after being recorded"sv;
+      respond_invalid("Internal error: the proven tuple could not be found immediately after recording it.");
+      return;
+    }
+
+    auto body = jochona::manifest::build_encoder_tuple(*proven);
     response->write(SimpleWeb::StatusCode::success_ok, body.dump(), headers);
     response->close_connection_after_response = true;
   }
@@ -1061,6 +1389,14 @@ namespace nvhttp {
       tree.put("root.resume", 0);
       tree.put("root.<xmlattr>.status_code", 400);
       tree.put("root.<xmlattr>.status_message", "Missing a required launch parameter");
+
+      return;
+    }
+
+    if (is_observer_only_client()) {
+      tree.put("root.resume", 0);
+      tree.put("root.<xmlattr>.status_code", 403);
+      tree.put("root.<xmlattr>.status_message", "This client is authorized for observation only");
 
       return;
     }
@@ -1232,6 +1568,14 @@ namespace nvhttp {
       return;
     }
 
+    if (is_observer_only_client()) {
+      tree.put("root.resume", 0);
+      tree.put("root.<xmlattr>.status_code", 403);
+      tree.put("root.<xmlattr>.status_message", "This client is authorized for observation only");
+
+      return;
+    }
+
     auto requested_jochona_tuple = args.find("jochonaTuple"s);
     bool virtual_display_requested = util::from_view(get_arg(args, "virtualDisplay", "0"));
 
@@ -1321,7 +1665,7 @@ namespace nvhttp {
   }
 
   /**
-   * @brief Check whether cel.
+   * @brief Cancel the active GameStream session and terminate its application.
    *
    * @param response HTTP response object to populate.
    * @param request HTTP request data from the client.
@@ -1338,9 +1682,16 @@ namespace nvhttp {
       response->close_connection_after_response = true;
     });
 
+    if (is_observer_only_client()) {
+      tree.put("root.cancel", 0);
+      tree.put("root.<xmlattr>.status_code", 403);
+      tree.put("root.<xmlattr>.status_message", "This client is authorized for observation only");
+
+      return;
+    }
+
     tree.put("root.cancel", 1);
     tree.put("root.<xmlattr>.status_code", 200);
-
     rtsp_stream::terminate_sessions();
 
     if (proc::proc.running() > 0) {
@@ -1360,6 +1711,14 @@ namespace nvhttp {
    */
   void appasset(resp_https_t response, req_https_t request) {
     print_req<SunshineHTTPS>(request);
+
+    // Jochona: app artwork leaks the paired app inventory (title/ID), which
+    // an observer-only cert must not see any more than it can see /applist.
+    if (is_observer_only_client()) {
+      response->write(SimpleWeb::StatusCode::client_error_forbidden);
+      response->close_connection_after_response = true;
+      return;
+    }
 
     auto args = request->parse_query_string();
     auto app_image = proc::proc.get_app_image((int) util::from_view(get_arg(args, "appid")));
@@ -1480,6 +1839,16 @@ namespace nvhttp {
       tree.put("root.<xmlattr>.status_message"s, "The client is not authorized. Certificate verification failed."s);
     };
 
+    // Jochona observer-only enforcement coverage (is_observer_only_client()
+    // / is_observer_only_cert()): keep this table in sync with the routes
+    // registered immediately below whenever a route is added or removed.
+    //   denied (session/app control or app-inventory data):
+    //     /launch, /resume, /cancel, /applist, /appasset,
+    //     /jochona/v1/volume (GET+PUT), /jochona/v1/probe
+    //   allowed (read-only, matches the host.observe grant):
+    //     /serverinfo, /jochona/v1/capabilities
+    //   not applicable (pairing itself, runs before any grant exists):
+    //     /pair
     https_server.default_resource["GET"] = not_found<SunshineHTTPS>;
     https_server.resource["^/serverinfo$"]["GET"] = serverinfo<SunshineHTTPS>;
     https_server.resource["^/pair$"]["GET"] = [&add_cert](auto resp, auto req) {
@@ -1495,6 +1864,9 @@ namespace nvhttp {
     };
     https_server.resource["^/cancel$"]["GET"] = cancel;
     https_server.resource["^/jochona/v1/capabilities$"]["GET"] = jochona_capabilities;
+    https_server.resource["^/jochona/v1/volume$"]["GET"] = jochona_volume_get;
+    https_server.resource["^/jochona/v1/volume$"]["PUT"] = jochona_volume_set;
+    https_server.resource["^/jochona/v1/probe$"]["POST"] = jochona_probe;
 
     https_server.config.reuse_address = true;
     https_server.config.address = net::get_bind_address(address_family);

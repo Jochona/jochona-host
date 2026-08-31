@@ -1287,6 +1287,26 @@ namespace rtsp_stream {
       return;
     }
 
+    // Jochona: a jochonaTuple pinned at /launch or /resume constrains this
+    // session to an exact codec/dynamic-range/chroma combination. The
+    // active_hevc_mode/active_av1_mode narrowing above only blocks a
+    // *disabled* codec outright; it does not stop a client from announcing
+    // a still-enabled combination (e.g. H.264, or the wrong chroma/dynamic
+    // range) that was never proven. Enforce the exact pin here so Host
+    // never silently serves a codec/profile/chroma/bit depth other than
+    // the one the client selected, per
+    // docs/protocols/jochona-host-capabilities.md's "Session request"
+    // contract.
+    if (session.pinned_encoder_tuple) {
+      const auto &pinned = *session.pinned_encoder_tuple;
+      if (config.monitor.videoFormat != pinned.video_format || config.monitor.dynamicRange != pinned.dynamic_range || config.monitor.chromaSamplingType != pinned.chroma_sampling_type) {
+        BOOST_LOG(warning) << "Client's RTSP ANNOUNCE requested a codec/dynamic-range/chroma combination that does not match the encoder tuple pinned via jochonaTuple"sv;
+
+        respond(sock, session, &option, 400, "BAD REQUEST", req->sequenceNumber, {});
+        return;
+      }
+    }
+
     // Check that any required encryption is enabled
     auto encryption_mode = net::encryption_mode_for_address(sock.remote_endpoint().address());
     if (encryption_mode == config::ENCRYPTION_MODE_MANDATORY && (config.encryptionFlagsEnabled & (SS_ENC_VIDEO | SS_ENC_AUDIO)) != (SS_ENC_VIDEO | SS_ENC_AUDIO)) {

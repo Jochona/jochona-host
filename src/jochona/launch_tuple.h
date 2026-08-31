@@ -12,6 +12,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <variant>
 #include <vector>
 
 // local includes
@@ -100,13 +101,17 @@ namespace jochona::launch {
    * (physical unless `capture_virtual` is set). On success, pins the
    * session's codec selection by narrowing video::active_hevc_mode/
    * active_av1_mode so RTSP/serverinfo codec negotiation cannot silently
-   * substitute a different codec than the one the client pinned.
+   * substitute a different codec than the one the client pinned, and
+   * records the exact codec/dynamic-range/chroma constraints on
+   * `session.pinned_encoder_tuple` so cmd_announce() can reject an RTSP
+   * ANNOUNCE that requests anything else, since a client is not obligated
+   * to actually request the tuple it pinned.
    *
    * @return std::nullopt when the tuple is accepted and pinned; otherwise
    *         an `encoder_tuple_unavailable` rejection with verified
    *         alternatives at the same resolution/fps/HDR shape.
    */
-  [[nodiscard]] std::optional<tuple_rejection_t> resolve_requested_tuple(std::string_view requested_id, const rtsp_stream::launch_session_t &session, bool capture_virtual);
+  [[nodiscard]] std::optional<tuple_rejection_t> resolve_requested_tuple(std::string_view requested_id, rtsp_stream::launch_session_t &session, bool capture_virtual);
 
   /**
    * @brief Lease and configure the default Jochona Display Adapter slot for
@@ -138,5 +143,52 @@ namespace jochona::launch {
    * @brief True if a virtual-display lease is currently held for the active session.
    */
   [[nodiscard]] bool virtual_display_lease_active();
+
+  /**
+   * @brief Client-requested shape for a standalone `POST /jochona/v1/probe`
+   *        attempt -- everything except `backend`, which this Host resolves
+   *        internally from whichever encoder probe_encoders() selects (the
+   *        client has no way to know or choose it in advance).
+   */
+  struct exact_tuple_shape_t {
+    std::string codec;  ///< "h264" | "hevc" | "av1".
+    std::string profile;  ///< "main8" | "main10".
+    std::string chroma;  ///< "420" | "444".
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+    std::uint32_t fps = 0;
+    bool hdr = false;
+  };
+
+  /**
+   * @brief Probe one exact encoder-tuple combination outside of a live
+   *        session, for the `/jochona/v1/probe` bootstrap-proof endpoint.
+   *
+   * A fresh Host/Jochona Client pairing has no proven tuples until a
+   * session has actually launched once, but Jochona Client refuses to
+   * launch without a matching advertised tuple -- this breaks that
+   * deadlock by running the exact same proof sequence a real `/launch` or
+   * `/resume` call would use for the same combination: reconfigure the
+   * display for the requested mode, re-select the active encoder
+   * (video::probe_encoders()), and encode probe frames for the exact
+   * candidate (video::probe_encoder_config()). A successful probe is
+   * recorded into encoder::store_t exactly like a successful launch would
+   * be, so it is immediately visible in the next `/jochona/v1/capabilities`
+   * fetch. Never weakens the "exact proof before advertise" invariant: a
+   * failure here means the combination genuinely does not work, not a
+   * best-effort guess.
+   *
+   * Rejects with `host_busy` when an app or session is already active
+   * (probing reconfigures live display/capture state). Always reverts any
+   * display or virtual-display-lease state it changed before returning,
+   * since no real session follows a probe.
+   *
+   * @param shape Requested codec/profile/chroma/resolution/fps/HDR combination.
+   * @param capture_virtual True to prove virtual-display capture; false for physical capture.
+   * @return The resulting proven tuple's stable id (already recorded in
+   *         encoder::store_t) on success; otherwise an
+   *         `encoder_tuple_unavailable` or `host_busy` rejection.
+   */
+  [[nodiscard]] std::variant<std::string, tuple_rejection_t> probe_exact_tuple(const exact_tuple_shape_t &shape, bool capture_virtual);
 
 }  // namespace jochona::launch

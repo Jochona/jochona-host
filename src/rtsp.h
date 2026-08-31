@@ -15,6 +15,21 @@ namespace rtsp_stream {
   constexpr auto RTSP_SETUP_PORT = 21;  ///< GameStream base-port offset used for the RTSP setup listener.
 
   /**
+   * @brief Encoder-tuple constraints pinned by a successful `jochonaTuple`
+   *        resolution (see jochona::launch::resolve_requested_tuple()).
+   *
+   * Fields use the same wire values cmd_announce() already parses from the
+   * RTSP ANNOUNCE payload (x-nv-vqos[0].bitStreamFormat,
+   * x-nv-video[0].dynamicRangeMode, x-ss-video[0].chromaSamplingType), so
+   * enforcement is a direct comparison with no translation step.
+   */
+  struct pinned_encoder_tuple_t {
+    int video_format = 0;  ///< 0 = H.264, 1 = HEVC, 2 = AV1.
+    int dynamic_range = 0;  ///< 0 = SDR/8-bit, 1 = HDR/10-bit.
+    int chroma_sampling_type = 0;  ///< 0 = 4:2:0, 1 = 4:4:4.
+  };
+
+  /**
    * @brief RTSP launch session state shared with stream setup.
    */
   struct launch_session_t {
@@ -43,6 +58,18 @@ namespace rtsp_stream {
     std::string rtsp_url_scheme;  ///< URL scheme selected by the RTSP SETUP flow.
     uint32_t rtsp_iv_counter;  ///< Counter value mixed into encrypted RTSP IVs.
     std::string client_cert;  ///< PEM certificate for the paired Moonlight client.
+
+    /**
+     * @brief Encoder-tuple constraints pinned via `jochonaTuple`, or
+     *        `std::nullopt` when the client did not request tuple pinning.
+     *
+     * When set, cmd_announce() rejects any RTSP ANNOUNCE whose codec,
+     * dynamic range, or chroma sampling does not match exactly, per
+     * docs/protocols/jochona-host-capabilities.md's "Session request"
+     * contract: Jochona Host never silently changes codec/profile/chroma/
+     * bit depth once a tuple has been accepted.
+     */
+    std::optional<pinned_encoder_tuple_t> pinned_encoder_tuple;
   };
 
   /**

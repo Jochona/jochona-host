@@ -39,7 +39,7 @@ namespace jochona::encoder {
    *        the entire store (see the file-level doc comment).
    */
   struct environment_fingerprint_t {
-    std::string gpu;  ///< Best-effort GPU identity (configured adapter name, or "unspecified").
+    std::string gpu;  ///< Resolved GPU PCI identity ("vendor:device:subsystem:revision", the configured adapter name, or "unspecified" when neither is resolvable).
     std::string driver;  ///< Best-effort driver identity, or "unknown" when undiscoverable on this platform.
     std::string display_mode;  ///< Active "{width}x{height}@{fps}-{hdr|sdr}" display mode.
     std::string virtual_display_adapter_version;  ///< Installed Jochona Display Adapter version, or "not-installed".

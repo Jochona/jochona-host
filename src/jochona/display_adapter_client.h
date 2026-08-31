@@ -25,6 +25,7 @@
 #include <string>
 #include <string_view>
 #include <variant>
+#include <vector>
 
 namespace jochona::display_adapter {
 
@@ -55,6 +56,17 @@ namespace jochona::display_adapter {
     std::uint16_t protocol_major = 0;  ///< Negotiated protocol major version, valid when `healthy`.
     std::uint16_t protocol_minor = 0;  ///< Negotiated protocol minor version, valid when `healthy`.
     std::string detail;  ///< Human-readable detail, always populated (success or failure reason).
+  };
+
+  /**
+   * @brief Snapshot of one slot in the driver's pool, as reported by
+   *        ENUMERATE_SLOTS -- the real per-slot data backing the
+   *        manifest's `virtualDisplay.pool[]` entries.
+   */
+  struct slot_status_t {
+    std::uint32_t id = 0;  ///< Slot id (0 for the sole protocol v1.0 default slot).
+    bool leased = false;  ///< True when the slot is Leased or Configured (in use by some owner).
+    slot_mode_t mode;  ///< Baseline mode when free, current configured mode otherwise (per the ABI's JochonaSlotInfo.Mode doc).
   };
 
   /**
@@ -102,6 +114,16 @@ namespace jochona::display_adapter {
      * `virtualDisplay.installed`/`healthy` fields honestly.
      */
     [[nodiscard]] manifest_status_t probe();
+
+    /**
+     * @brief Enumerate the driver's slot pool (id, lease state, mode) for
+     *        the capabilities manifest's `virtualDisplay.pool[]`.
+     *
+     * Safe to call at any time, including while a lease is held elsewhere
+     * in the process. Returns `std::nullopt` when the driver is not
+     * installed or unreachable; never fabricates slot data.
+     */
+    [[nodiscard]] std::optional<std::vector<slot_status_t>> enumerate_slots();
 
     /**
      * @brief Lease the default slot (id 0) for the given opaque owner id.

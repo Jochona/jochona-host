@@ -5,7 +5,10 @@
 
 #include "../tests_common.h"
 
+// standard imports
+#include <algorithm>
 #include <src/nvhttp.h>
+#include <vector>
 
 using namespace nvhttp;
 
@@ -264,4 +267,120 @@ TEST(PairingTest, OutOfOrderCalls) {
   // Calling it again should fail
   getservercert(sess, tree, "test");
   ASSERT_FALSE(tree.get<int>("root.paired") == 1);
+}
+
+TEST(PairingTest, ObserverOnlyRequestPersistsAsObserverOnlyGrant) {
+  // Jochona: a jochona_permission=observer_only request on the getservercert
+  // phase (see nvhttp.cpp's pair()) must survive all four pairing phases
+  // and land on the persisted named_cert_t as observer_only=true, since
+  // every session/app/volume-control route's denial
+  // (is_observer_only_client()) and the manifest's granted permissions
+  // (jochona_permission_grant_for_current_client()) both key off that bit.
+  boost::property_tree::ptree tree;
+
+  setup(PRIVATE_KEY, PUBLIC_CERT);
+
+  auto session = std::make_shared<pair_session_t>(pair_session_t {
+    .client = {.uniqueID = "observer-1234", .cert = PUBLIC_CERT, .name = "beacon-observer", .observer_only = true},
+    .async_insert_pin = {.salt = "ff5dc6eda99339a8a0793e216c4257c4"}
+  });
+
+  getservercert(*session, tree, "5338");
+  ASSERT_EQ(tree.get<int>("root.paired"), 1);
+
+  clientchallenge(*session, tree, util::from_hex_vec("741CD3D6890C16DA39D53BCA0893AAF0", true));
+  ASSERT_EQ(tree.get<int>("root.paired"), 1);
+
+  serverchallengeresp(*session, tree, util::from_hex_vec("920BABAE9F7599AA1CA8EC87FB3454C91872A7D8D5127DDC176C2FDAE635CF7A", true));
+  ASSERT_EQ(tree.get<int>("root.paired"), 1);
+  session->serverchallenge = util::from_hex_vec("AAAAAAAAAAAAAAAA", true);
+
+  // Snapshot the paired-client list before the final phase so the newly
+  // added entry can be identified by uuid even though every pairing test
+  // in this file reuses the same PUBLIC_CERT PEM.
+  auto before = get_all_clients();
+  std::vector<std::string> before_uuids;
+  for (auto &named_cert : before) {
+    before_uuids.push_back(named_cert.at("uuid").get<std::string>());
+  }
+
+  auto add_cert = std::make_shared<safe::queue_t<crypto::x509_t>>(30);
+  clientpairingsecret(
+    *session,
+    add_cert,
+    tree,
+    util::from_hex_vec(
+      "000102030405060708090A0B0C0D0EFF"  // secret
+      "9BB74D8DE2FF006C3F47FC45EFDAA97D433783AFAB3ACD85CA7ED2330BB2A7BD18A5B044AF8CAC177116FAE8A6E8E44653A8944A0F8EA138B2E013756D847D2C4FC52F736E2E7E9B4154712B18F8307B2A161E010F0587744163E42ECA9EA548FC435756EDCF1FEB94037631ABB72B29DDAC0EA5E61F2DBFCC3B20AA021473CC85AC98D88052CA6618ED1701EFBF142C18D5E779A3155B84DF65057D4823EC194E6DF14006793E8D7A3DCCE20A911636C4E01ECA8B54B9DE9F256F15DE9A980EA024B30D77579140D45EC220C738164BDEEEBF7364AE94A5FF9B784B40F2E640CE8603017DEEAC7B2AD77B807C643B7B349C110FE15F94C7B3D37FF15FDFBE26",
+      true
+    )
+  );
+  ASSERT_EQ(tree.get<int>("root.paired"), 1);
+
+  auto after = get_all_clients();
+  ASSERT_EQ(after.size(), before.size() + 1);
+
+  bool found_new_entry = false;
+  for (auto &named_cert : after) {
+    auto uuid = named_cert.at("uuid").get<std::string>();
+    if (std::find(before_uuids.begin(), before_uuids.end(), uuid) != before_uuids.end()) {
+      continue;
+    }
+    found_new_entry = true;
+    EXPECT_TRUE(named_cert.at("observer_only").get<bool>());
+  }
+  ASSERT_TRUE(found_new_entry);
+}
+
+TEST(PairingTest, DefaultPairingRequestPersistsAsFullControlGrant) {
+  // The vast majority of GameStream/Moonlight clients never send
+  // jochona_permission at all; they must keep receiving the full-control
+  // grant this Host has always granted paired clients.
+  boost::property_tree::ptree tree;
+
+  setup(PRIVATE_KEY, PUBLIC_CERT);
+
+  auto session = std::make_shared<pair_session_t>(pair_session_t {
+    .client = {.uniqueID = "full-control-1234", .cert = PUBLIC_CERT, .name = "moonlight"},
+    .async_insert_pin = {.salt = "ff5dc6eda99339a8a0793e216c4257c4"}
+  });
+  ASSERT_FALSE(session->client.observer_only);
+
+  getservercert(*session, tree, "5338");
+  clientchallenge(*session, tree, util::from_hex_vec("741CD3D6890C16DA39D53BCA0893AAF0", true));
+  serverchallengeresp(*session, tree, util::from_hex_vec("920BABAE9F7599AA1CA8EC87FB3454C91872A7D8D5127DDC176C2FDAE635CF7A", true));
+  session->serverchallenge = util::from_hex_vec("AAAAAAAAAAAAAAAA", true);
+
+  auto before = get_all_clients();
+  std::vector<std::string> before_uuids;
+  for (auto &named_cert : before) {
+    before_uuids.push_back(named_cert.at("uuid").get<std::string>());
+  }
+
+  auto add_cert = std::make_shared<safe::queue_t<crypto::x509_t>>(30);
+  clientpairingsecret(
+    *session,
+    add_cert,
+    tree,
+    util::from_hex_vec(
+      "000102030405060708090A0B0C0D0EFF"  // secret
+      "9BB74D8DE2FF006C3F47FC45EFDAA97D433783AFAB3ACD85CA7ED2330BB2A7BD18A5B044AF8CAC177116FAE8A6E8E44653A8944A0F8EA138B2E013756D847D2C4FC52F736E2E7E9B4154712B18F8307B2A161E010F0587744163E42ECA9EA548FC435756EDCF1FEB94037631ABB72B29DDAC0EA5E61F2DBFCC3B20AA021473CC85AC98D88052CA6618ED1701EFBF142C18D5E779A3155B84DF65057D4823EC194E6DF14006793E8D7A3DCCE20A911636C4E01ECA8B54B9DE9F256F15DE9A980EA024B30D77579140D45EC220C738164BDEEEBF7364AE94A5FF9B784B40F2E640CE8603017DEEAC7B2AD77B807C643B7B349C110FE15F94C7B3D37FF15FDFBE26",
+      true
+    )
+  );
+  ASSERT_EQ(tree.get<int>("root.paired"), 1);
+
+  auto after = get_all_clients();
+  ASSERT_EQ(after.size(), before.size() + 1);
+
+  bool found_new_entry = false;
+  for (auto &named_cert : after) {
+    auto uuid = named_cert.at("uuid").get<std::string>();
+    if (std::find(before_uuids.begin(), before_uuids.end(), uuid) != before_uuids.end()) {
+      continue;
+    }
+    found_new_entry = true;
+    EXPECT_FALSE(named_cert.at("observer_only").get<bool>());
+  }
+  ASSERT_TRUE(found_new_entry);
 }

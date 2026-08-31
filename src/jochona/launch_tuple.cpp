@@ -21,9 +21,12 @@
 
 // local includes
 #include "../config.h"
+#include "../display_device.h"
 #include "../httpcommon.h"
 #include "../logging.h"
+#include "../process.h"
 #include "../rtsp.h"
+#include "../utility.h"
 #include "../video.h"
 #include "display_adapter_client.h"
 
@@ -73,11 +76,21 @@ namespace jochona::launch {
       for (UINT i = 0; factory->EnumAdapters1(i, &adapter) != DXGI_ERROR_NOT_FOUND; ++i) {
         DXGI_ADAPTER_DESC1 desc {};
         bool matches = config::video.adapter_name.empty();
-        if (SUCCEEDED(adapter->GetDesc1(&desc)) && !matches) {
+        bool got_desc = SUCCEEDED(adapter->GetDesc1(&desc));
+        if (got_desc && !matches) {
           const std::wstring configured(config::video.adapter_name.begin(), config::video.adapter_name.end());
           matches = std::wstring(desc.Description) == configured;
         }
         if (matches) {
+          // Stable PCI identity (vendor:device:subsystem:revision) rather
+          // than the localized, driver-version-dependent Description
+          // string -- this is what actually distinguishes one GPU model
+          // from another for proof-invalidation purposes, and matches the
+          // capabilities manifest's documented "pci-vendor-device-id" gpu
+          // field shape.
+          if (got_desc) {
+            fingerprint.gpu = std::format("{:04x}:{:04x}:{:04x}:{:02x}", desc.VendorId, desc.DeviceId, desc.SubSysId, desc.Revision);
+          }
           LARGE_INTEGER version {};
           if (SUCCEEDED(adapter->CheckInterfaceSupport(__uuidof(ID3D11Device), &version))) {
             fingerprint.driver = std::format("{:016x}", static_cast<std::uint64_t>(version.QuadPart));
@@ -205,7 +218,7 @@ namespace jochona::launch {
     }
   }
 
-  std::optional<tuple_rejection_t> resolve_requested_tuple(std::string_view requested_id, const rtsp_stream::launch_session_t &session, bool capture_virtual) {
+  std::optional<tuple_rejection_t> resolve_requested_tuple(std::string_view requested_id, rtsp_stream::launch_session_t &session, bool capture_virtual) {
     auto &store = encoder::store_t::instance();
     auto proven = store.find(requested_id);
 
@@ -240,11 +253,14 @@ namespace jochona::launch {
     // Pin session codec selection: narrow the active codec modes so RTSP's
     // codec negotiation with the client cannot silently pick a different
     // codec/HDR level than the one the client pinned via jochonaTuple.
+    int pinned_video_format = 0;
     if (key.codec == "h264") {
       video::active_hevc_mode = 1;
       video::active_av1_mode = 1;
+      pinned_video_format = 0;
     } else if (key.codec == "hevc") {
       video::active_av1_mode = 1;
+      pinned_video_format = 1;
       if (key.chroma == "444" && key.hdr) {
         video::active_hevc_mode = 4;
       } else if (key.hdr) {
@@ -254,6 +270,7 @@ namespace jochona::launch {
       }
     } else if (key.codec == "av1") {
       video::active_hevc_mode = 1;
+      pinned_video_format = 2;
       if (key.chroma == "444" && key.hdr) {
         video::active_av1_mode = 4;
       } else if (key.hdr) {
@@ -262,6 +279,19 @@ namespace jochona::launch {
         video::active_av1_mode = 2;
       }
     }
+
+    // Record the exact constraints on the session itself so cmd_announce()
+    // can reject an RTSP ANNOUNCE that requests a different codec/dynamic-
+    // range/chroma combination than the tuple that was actually pinned
+    // here -- narrowing active_hevc_mode/active_av1_mode above only blocks
+    // HEVC/AV1 entirely when disabled, it does not stop a client from
+    // requesting a still-enabled combination (e.g. H.264, or the wrong
+    // chroma/dynamic-range) that this Host never proved.
+    rtsp_stream::pinned_encoder_tuple_t pinned;
+    pinned.video_format = pinned_video_format;
+    pinned.dynamic_range = key.hdr ? 1 : 0;
+    pinned.chroma_sampling_type = key.chroma == "444" ? 1 : 0;
+    session.pinned_encoder_tuple = pinned;
 
     return std::nullopt;
   }
@@ -397,6 +427,106 @@ namespace jochona::launch {
   bool virtual_display_lease_active() {
     std::lock_guard lock {virtual_lease_mutex};
     return virtual_lease.has_value() && virtual_lease->valid();
+  }
+
+  std::variant<std::string, tuple_rejection_t> probe_exact_tuple(const exact_tuple_shape_t &shape, bool capture_virtual) {
+    if (proc::proc.running() > 0 || rtsp_stream::session_count() > 0) {
+      return host_busy_rejection();
+    }
+
+    // Synthetic session carrying only the fields configure_display() and
+    // acquire_virtual_display_for_session() actually read; every other
+    // launch_session_t field is irrelevant to a standalone probe.
+    rtsp_stream::launch_session_t session {};
+    session.width = static_cast<int>(shape.width);
+    session.height = static_cast<int>(shape.height);
+    session.fps = static_cast<int>(shape.fps);
+    session.enable_hdr = shape.hdr;
+
+    bool leased_virtual_display = false;
+    if (capture_virtual) {
+      if (auto rejection = acquire_virtual_display_for_session(session)) {
+        return *rejection;
+      }
+      leased_virtual_display = true;
+    }
+
+    // No real session follows a probe: always undo whatever display and
+    // virtual-display-lease state this call changed, on every exit path.
+    auto revert_guard = util::fail_guard([&] {
+      if (leased_virtual_display) {
+        release_active_virtual_display_lease();
+      }
+      display_device::revert_configuration();
+    });
+
+    display_device::configure_display(config::video, session);
+
+    auto reject_without_id = [&](std::string stage, std::string detail) {
+      tuple_rejection_t rejection;
+      rejection.error = "encoder_tuple_unavailable";
+      rejection.stage = std::move(stage);
+      rejection.detail = std::move(detail);
+      return rejection;
+    };
+
+    // Re-select the active encoder for the reconfigured display, exactly as
+    // /launch and /resume do before probing, so a successful probe here
+    // genuinely predicts what a real launch would find.
+    if (video::probe_encoders()) {
+      return reject_without_id("encoder_probe", "No working encoder was found for this display mode. Is a display connected and turned on?");
+    }
+
+    auto backend_view = video::current_encoder_name();
+    if (backend_view.empty()) {
+      return reject_without_id("encoder_probe", "No active encoder backend is selected on this host.");
+    }
+
+    encoder::tuple_key_t key;
+    key.backend = std::string {backend_view};
+    key.codec = shape.codec;
+    key.profile = shape.profile;
+    key.chroma = shape.chroma;
+    key.width = shape.width;
+    key.height = shape.height;
+    key.fps = shape.fps;
+    key.hdr = shape.hdr;
+
+    auto requested_id = encoder::make_stable_id(key);
+    auto &store = encoder::store_t::instance();
+
+    auto reject = [&](std::string stage, std::string detail) {
+      auto rejection = reject_without_id(std::move(stage), std::move(detail));
+      rejection.requested = requested_id;
+      rejection.alternatives = store.alternatives_for(requested_id);
+      return rejection;
+    };
+
+    video::config_t candidate {};
+    candidate.width = static_cast<int>(key.width);
+    candidate.height = static_cast<int>(key.height);
+    candidate.framerate = static_cast<int>(key.fps);
+    candidate.bitrate = static_cast<int>(std::clamp<std::uint64_t>(
+      static_cast<std::uint64_t>(key.width) * key.height * key.fps / 50000,
+      6000,
+      150000
+    ));
+    candidate.slicesPerFrame = 1;
+    candidate.encoderCscMode = key.hdr ? 3 : 1;
+    candidate.videoFormat = key.codec == "h264" ? 0 : key.codec == "hevc" ? 1 :
+                                                                            2;
+    candidate.dynamicRange = key.profile == "main10" ? 1 : 0;
+    candidate.chromaSamplingType = key.chroma == "444" ? 1 : 0;
+
+    if (!video::probe_encoder_config(candidate)) {
+      return reject("encoder_initialize", std::format("The active encoder ['{}'] rejected the requested capture format for this display mode.", backend_view));
+    }
+
+    auto environment = current_environment_fingerprint(key.width, key.height, key.fps, key.hdr);
+    store.begin_environment(environment);
+    store.record_success(key, capture_virtual ? "virtual" : "physical", environment);
+
+    return requested_id;
   }
 
 }  // namespace jochona::launch

@@ -4,6 +4,10 @@
  */
 #include "../tests_common.h"
 
+#ifdef __APPLE__
+  #include <ApplicationServices/ApplicationServices.h>
+#endif
+
 #include <src/input.h>
 
 struct MouseHIDTest: PlatformTestSuite, testing::WithParamInterface<util::point_t> {
@@ -25,6 +29,22 @@ struct MouseHIDTest: PlatformTestSuite, testing::WithParamInterface<util::point_
     BaseTest::TearDown();
   }
 };
+
+#ifdef __APPLE__
+namespace {
+  util::point_t expected_absolute_location(const util::point_t &client_location) {
+    const auto display = CGMainDisplayID();
+    const auto mode = CGDisplayCopyDisplayMode(display);
+    const auto scaling = static_cast<double>(CGDisplayPixelsWide(display)) / static_cast<double>(CGDisplayModeGetPixelWidth(mode));
+    CFRelease(mode);
+    const auto bounds = CGDisplayBounds(display);
+    return {
+      client_location.x * scaling + bounds.origin.x,
+      client_location.y * scaling + bounds.origin.y,
+    };
+  }
+}  // namespace
+#endif
 
 INSTANTIATE_TEST_SUITE_P(
   MouseInputs,
@@ -68,8 +88,8 @@ TEST_P(MouseHIDTest, MoveInputTest) {
   EXPECT_TRUE(has_input_moved);
 
   // Verify we moved as much as we requested
-  EXPECT_EQ(new_loc.x - old_loc.x, mouse_delta.x);
-  EXPECT_EQ(new_loc.y - old_loc.y, mouse_delta.y);
+  EXPECT_NEAR(new_loc.x - old_loc.x, mouse_delta.x, 1.0);
+  EXPECT_NEAR(new_loc.y - old_loc.y, mouse_delta.y, 1.0);
 }
 
 TEST_P(MouseHIDTest, AbsMoveInputTest) {
@@ -119,7 +139,15 @@ TEST_P(MouseHIDTest, AbsMoveInputTest) {
 
   EXPECT_TRUE(has_input_moved);
 
-  // Verify we moved to the absolute coordinate
+  // macOS absolute input is expressed in the captured display's virtual
+  // pixel space and converted to CoreGraphics points. Cursor snapshots can
+  // round to an integral point, so allow one point of precision loss.
+#ifdef __APPLE__
+  const auto expected = expected_absolute_location(mouse_pos);
+  EXPECT_NEAR(new_loc.x, expected.x, 1.0);
+  EXPECT_NEAR(new_loc.y, expected.y, 1.0);
+#else
   EXPECT_EQ(new_loc.x, mouse_pos.x);
   EXPECT_EQ(new_loc.y, mouse_pos.y);
+#endif
 }

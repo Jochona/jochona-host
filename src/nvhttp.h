@@ -100,6 +100,19 @@ namespace nvhttp {
       std::string uniqueID = {};
       std::string cert = {};
       std::string name = {};
+
+      /**
+       * @brief True when the client requested Beacon-style observer-only
+       *        enrollment (`jochonaObserverOnly=1` on the `getservercert`
+       *        pairing phase) instead of the default full-control grant.
+       *
+       * Persisted onto the resulting `named_cert_t::observer_only` when
+       * pairing completes in clientpairingsecret(); gates
+       * jochona::capability::permission_set_t::observer_grant() vs
+       * default_paired_client_grant() and denies session/volume control
+       * for this certificate thereafter.
+       */
+      bool observer_only = false;
     } client;  ///< Client object or client certificate data owned by this state..
 
     std::unique_ptr<crypto::aes_t> cipher_key = {};  ///< Cipher key.
@@ -245,4 +258,19 @@ namespace nvhttp {
    * @examples_end
    */
   void erase_all_clients();
+
+  /**
+   * @brief True if `cert` is a persisted Beacon-style observer-only enrollment.
+   *
+   * Observer-only certificates are granted `jochona::capability::
+   * permission_e::host_observe` alone (read-only /serverinfo and
+   * capabilities/capacity) and every session/app/volume-control endpoint
+   * denies them.
+   *
+   * @param cert PEM certificate to look up in the paired-client list.
+   * @return True only for a certificate found in the paired-client list
+   *         with `observer_only` set; false for an unrecognized or
+   *         full-control certificate.
+   */
+  bool is_observer_only_cert(std::string_view cert);
 }  // namespace nvhttp

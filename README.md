@@ -22,6 +22,14 @@
   <a href="https://sonarcloud.io/project/overview?id=LizardByte_Sunshine"><img src="https://img.shields.io/sonar/quality_gate/LizardByte_Sunshine.svg?server=https%3A%2F%2Fsonarcloud.io&style=for-the-badge&logo=sonarqubecloud&label=sonarcloud" alt="SonarCloud"></a>
 </div>
 
+## 🌙 Jochona Host fork
+
+This repository is **Jochona Host**, a fork of [LizardByte/Sunshine](https://github.com/LizardByte/Sunshine). It is fully baseline-GameStream compatible with any Moonlight client: every Jochona extension is additive and optional, and a client that never sends a Jochona-specific parameter gets exactly Sunshine's stock behavior. Badges, releases, and links above point at upstream LizardByte/Sunshine project infrastructure (stars, CI, downloads); Jochona Host is not itself published through those upstream release channels.
+
+On top of that baseline, Jochona Host is developing in-progress extensions: an authenticated capability manifest (`GET /jochona/v1/capabilities`), exact per-combination Encoder Tuple proof and a bootstrap preflight probe, a Windows Virtual Display Adapter lease lifecycle, Host Volume control, and Beacon-style observer-only pairing. These are tracked as **Unreleased** in the [changelog](docs/changelog.md) and are under active development, not a finished v1.0.
+
+The authoritative specification for these extensions is [`docs/protocols/jochona-host-capabilities.md`](docs/protocols/jochona-host-capabilities.md); it takes precedence over this README for anything Jochona-specific. All upstream Sunshine documentation below remains accurate for baseline GameStream behavior.
+
 ## ℹ️ About
 
 Sunshine is a self-hosted game stream host for Moonlight.

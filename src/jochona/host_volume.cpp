@@ -141,4 +141,20 @@ namespace jochona::host_volume {
 
 #endif  // _WIN32
 
+  nlohmann::json to_json(const status_t &status) {
+    nlohmann::json body;
+    body["available"] = status.available;
+    body["min"] = status.available ? nlohmann::json(status.min) : nlohmann::json(nullptr);
+    body["max"] = status.available ? nlohmann::json(status.max) : nlohmann::json(nullptr);
+    body["current"] = status.available ? nlohmann::json(status.current) : nlohmann::json(nullptr);
+    return body;
+  }
+
+  std::string to_json(const rejection_t &rejection) {
+    nlohmann::json body;
+    body["error"] = rejection.error;
+    body["detail"] = rejection.detail;
+    return body.dump();
+  }
+
 }  // namespace jochona::host_volume

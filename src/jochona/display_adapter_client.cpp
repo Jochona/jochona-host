@@ -283,6 +283,43 @@ namespace jochona::display_adapter {
     return status;
   }
 
+  std::optional<std::vector<slot_status_t>> client_t::enumerate_slots() {
+    if (!ensure_open()) {
+      return std::nullopt;
+    }
+
+    JochonaEnumerateSlotsIn in {};
+    in.RequestedVersion = current_protocol_version();
+
+    JochonaEnumerateSlotsOut out {};
+    DWORD bytes = 0;
+    std::lock_guard lock {impl_->mutex};
+    if (impl_->device == INVALID_HANDLE_VALUE) {
+      return std::nullopt;
+    }
+    if (!impl_->send(IOCTL_JOCHONA_ENUMERATE_SLOTS, &in, sizeof(in), &out, sizeof(out), bytes) || bytes < sizeof(std::uint32_t)) {
+      return std::nullopt;
+    }
+
+    std::vector<slot_status_t> slots;
+    auto count = std::min<std::uint32_t>(out.SlotCount, JOCHONA_PROTOCOL_V1_MAX_SLOTS);
+    slots.reserve(count);
+    for (std::uint32_t i = 0; i < count; ++i) {
+      const auto &info = out.Slots[i];
+      slot_status_t status;
+      status.id = info.SlotId;
+      status.leased = info.State != JochonaSlotStateFree;
+      status.mode.width = info.Mode.Width;
+      status.mode.height = info.Mode.Height;
+      status.mode.refresh_numerator = info.Mode.RefreshNumerator;
+      status.mode.refresh_denominator = info.Mode.RefreshDenominator;
+      status.mode.bits_per_channel = info.Mode.BitsPerChannel;
+      status.mode.hdr_enabled = info.Mode.HdrEnabled != 0;
+      slots.push_back(status);
+    }
+    return slots;
+  }
+
   std::variant<lease_handle_t, error_e> client_t::lease(const std::array<std::uint8_t, 16> &owner_id) {
     if (!ensure_open()) {
       return error_e::driver_not_installed;
@@ -435,6 +472,10 @@ namespace jochona::display_adapter {
     status.healthy = false;
     status.detail = "Jochona Display Adapter is a Windows 11 IddCx driver; not available on this platform.";
     return status;
+  }
+
+  std::optional<std::vector<slot_status_t>> client_t::enumerate_slots() {
+    return std::nullopt;
   }
 
   std::variant<lease_handle_t, error_e> client_t::lease(const std::array<std::uint8_t, 16> &) {

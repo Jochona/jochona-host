@@ -13,6 +13,7 @@
 
 // local includes
 #include "capabilities.h"
+#include "encoder_tuples.h"
 
 namespace jochona::manifest {
 
@@ -26,5 +27,15 @@ namespace jochona::manifest {
    * status (jochona::host_volume). Nothing here is a static placeholder.
    */
   nlohmann::json build(const capability::permission_set_t &permissions);
+
+  /**
+   * @brief Serialize one proven encoder tuple to its `encoderTuples[]`
+   *        manifest shape (id/codec/profile/bitDepth/chroma/width/height/
+   *        fps/hdr/capture/proof).
+   *
+   * Shared with `POST /jochona/v1/probe`, whose 200 response is exactly one
+   * such entry -- the tuple that call just proved and recorded.
+   */
+  nlohmann::json build_encoder_tuple(const encoder::proven_tuple_t &tuple);
 
 }  // namespace jochona::manifest

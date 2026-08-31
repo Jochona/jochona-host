@@ -1,5 +1,19 @@
 # Changelog
 
+## Jochona Host — Unreleased
+
+Jochona Host's own changes, tracked separately from upstream Sunshine's release history embedded below.
+
+- **Capability manifest**: authenticated `GET /jochona/v1/capabilities` reports host identity, capacity, the caller's actual permission grant, proven Encoder Tuples, Virtual Display Adapter status and pool, runtime bitrate (unavailable, post-1.0), and Host Volume.
+- **Exact Encoder Tuple proof and preflight**: an Encoder Tuple is advertised only after the exact codec/profile/chroma/resolution/fps/HDR combination has encoded real probe frames successfully; proof is invalidated on any GPU, driver, display-mode, virtual-display-adapter, or Host-build change. `POST /jochona/v1/probe` proves one exact combination outside of a live session so a fresh Host/Jochona Client pairing can complete its first launch without an existing proven tuple.
+- **Requested-tuple enforcement**: `/launch` and `/resume` accept an optional `jochonaTuple` id and either honor it exactly or return a structured `encoder_tuple_unavailable`/`host_busy` rejection with verified alternatives; the pinned codec/dynamic-range/chroma is also enforced against the client's subsequent RTSP `ANNOUNCE`, not just accepted at launch time.
+- **Observer-only enrollment**: Beacon-style read-only pairing (`jochona_permission=observer_only`) persists a restricted grant per certificate, exposed via `host.observe` in the manifest and `<jochona_family>`/`<jochona_permission>` markers on `/serverinfo`; observer certificates are denied `/launch`, `/resume`, `/cancel`, `/applist`, `/appasset`, Host Volume, and Encoder Tuple preflight.
+- **Virtual Display Adapter lease lifecycle**: `/launch?virtualDisplay=1` leases and configures the signed Display Adapter's default pool slot for the session's requested mode/HDR, releasing it on disconnect, app exit, or explicit cancel; adapter installation and health are reported independently of pool capacity so physical capture keeps working when the adapter is absent.
+- **Host Volume**: `GET`/`PUT /jochona/v1/volume` reads and sets the Host's output volume on platforms with a real endpoint, honestly reporting unavailable elsewhere rather than fabricating a range.
+- **Structured failures**: every Jochona-specific rejection (busy, unavailable tuple, invalid parameter, unavailable Host Volume) is a JSON body with a stable `error` code and human-readable `detail`, never a silent fallback or a bare baseline GameStream status code.
+- **Sensitive request logging**: GameStream session keys, pairing material, certificates, stable Client identifiers, cookies, and authorization headers are redacted before request diagnostics reach Host logs.
+- **Baseline compatibility**: every Jochona extension is additive and optional; a client that never sends a Jochona-specific parameter gets exactly Sunshine's baseline GameStream behavior.
+
 @htmlonly
 <script type="module" src="https://md-block.verou.me/md-block.js"></script>
 <md-block
