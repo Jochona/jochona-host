@@ -23,10 +23,6 @@
   #include <windows.h>
 #endif
 
-#ifdef __APPLE__
-  #include "../platform/macos/misc.h"
-#endif
-
 // local includes
 #include "../config.h"
 #include "../display_device.h"
@@ -37,7 +33,6 @@
 #include "../utility.h"
 #include "../video.h"
 #include "display_adapter_client.h"
-#include "../pyrowave/pyrowave.h"
 
 using namespace std::literals;
 
@@ -114,9 +109,6 @@ namespace jochona::launch {
       factory->Release();
     }
 #endif
-#ifdef __APPLE__
-    platf::get_encoder_device_identity(fingerprint.gpu, fingerprint.driver);
-#endif
 
     auto adapter_status = display_adapter::client_t::instance().probe();
     if (adapter_status.installed && adapter_status.healthy) {
@@ -153,7 +145,8 @@ namespace jochona::launch {
       ));
       candidate.slicesPerFrame = 1;
       candidate.encoderCscMode = hdr ? 3 : 1;
-      candidate.videoFormat = codec == "h264" ? 0 : codec == "hevc" ? 1 : codec == "pyrowave" ? 3 : 2;
+      candidate.videoFormat = codec == "h264" ? 0 : codec == "hevc" ? 1 :
+                                                                      2;
       candidate.dynamicRange = profile == "main10" ? 1 : 0;
       candidate.chromaSamplingType = chroma == "444" ? 1 : 0;
 
@@ -193,9 +186,6 @@ namespace jochona::launch {
     encoder::store_t::instance().begin_environment(environment);
 
     if (!stream_hdr) {
-      if (pyrowave::available() && !capture_virtual) {
-        record_one("metal", "pyrowave", "main8", "420", width, height, fps, false, capture, environment);
-      }
       record_one(backend, "h264", "main8", "420", width, height, fps, false, capture, environment);
       if (video::last_encoder_probe_supported_yuv444_for_codec[0]) {
         record_one(backend, "h264", "main8", "444", width, height, fps, false, capture, environment);
@@ -292,12 +282,6 @@ namespace jochona::launch {
       } else {
         video::active_av1_mode = 2;
       }
-    }
-    if (key.codec == "pyrowave") {
-      if (!pyrowave::available()) return reject("PyroWave is disabled or unavailable.");
-      video::active_hevc_mode = 1;
-      video::active_av1_mode = 1;
-      pinned_video_format = 3;
     }
 
     // Record the exact constraints on the session itself so cmd_announce()
@@ -503,7 +487,7 @@ namespace jochona::launch {
     }
 
     encoder::tuple_key_t key;
-    key.backend = shape.codec == "pyrowave" ? "metal" : std::string {backend_view};
+    key.backend = std::string {backend_view};
     key.codec = shape.codec;
     key.profile = shape.profile;
     key.chroma = shape.chroma;
@@ -533,7 +517,8 @@ namespace jochona::launch {
     ));
     candidate.slicesPerFrame = 1;
     candidate.encoderCscMode = key.hdr ? 3 : 1;
-    candidate.videoFormat = key.codec == "h264" ? 0 : key.codec == "hevc" ? 1 : key.codec == "pyrowave" ? 3 : 2;
+    candidate.videoFormat = key.codec == "h264" ? 0 : key.codec == "hevc" ? 1 :
+                                                                            2;
     candidate.dynamicRange = key.profile == "main10" ? 1 : 0;
     candidate.chromaSamplingType = key.chroma == "444" ? 1 : 0;
 
