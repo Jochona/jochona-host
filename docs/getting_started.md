@@ -17,9 +17,8 @@ GitHub Releases, Flathub, Copr, winget, or Homebrew packages for it.
 **Option A: Download a CI build**
 1. Open a successful run of the `CI` workflow on `main` at the
    [Jochona/jochona-host Actions tab](https://github.com/Jochona/jochona-host/actions/workflows/ci.yml).
-   `workflow_dispatch` runs of this workflow currently fail during release setup (see
-   [Building > CI on this fork](building.md#ci-on-this-fork)); use a run triggered by a push or pull request
-   instead.
+   You can start this workflow manually (`gh workflow run ci.yml --repo Jochona/jochona-host --ref main`) or use a
+   run triggered by a push or pull request.
 2. Download the Windows build artifact (NSIS installer, WiX installer, or portable ZIP) from the run summary.
 3. Run the installer, or unzip the portable build and run `sunshine.exe` directly.
 
