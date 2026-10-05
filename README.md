@@ -28,7 +28,7 @@ This repository is **Jochona Host**, a fork of [LizardByte/Sunshine](https://git
 
 On top of that baseline, Jochona Host is developing in-progress extensions: an authenticated capability manifest (`GET /jochona/v1/capabilities`), exact per-combination Encoder Tuple proof and a bootstrap preflight probe, a Windows Virtual Display Adapter lease lifecycle, Host Volume control, and Beacon-style observer-only pairing. These are tracked as **Unreleased** in the [changelog](docs/changelog.md) and are under active development, not a finished v1.0.
 
-The authoritative specification for these extensions is [`docs/protocols/jochona-host-capabilities.md`](docs/protocols/jochona-host-capabilities.md); it takes precedence over this README for anything Jochona-specific. All upstream Sunshine documentation below remains accurate for baseline GameStream behavior.
+The authoritative specification for these extensions is [`docs/protocols/jochona-host-capabilities.md`](https://github.com/Jochona/jochona-host/blob/main/docs/protocols/jochona-host-capabilities.md); it takes precedence over this README for anything Jochona-specific. All upstream Sunshine documentation below remains accurate for baseline GameStream behavior.
 
 ## ℹ️ About
 

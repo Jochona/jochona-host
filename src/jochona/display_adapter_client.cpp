@@ -288,8 +288,8 @@ namespace jochona::display_adapter {
     if (out.Version.Major != JOCHONA_DISPLAY_ADAPTER_PROTOCOL_VERSION_MAJOR) {
       status.detail = std::format(
         "Driver protocol version {}.{} is incompatible with Host's {}.{}.",
-        out.Version.Major,
-        out.Version.Minor,
+        status.protocol_major,
+        status.protocol_minor,
         JOCHONA_DISPLAY_ADAPTER_PROTOCOL_VERSION_MAJOR,
         JOCHONA_DISPLAY_ADAPTER_PROTOCOL_VERSION_MINOR
       );
