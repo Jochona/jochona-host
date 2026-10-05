@@ -56,6 +56,10 @@ INPUT = ../README.md \
         ../third-party/doxyconfig/docs/source_code.md \
         ../src
 
+# verbatim copies of the canonical C ABI owned by jochona-display-adapter; must stay byte-identical, so no doc edits
+EXCLUDE = ../src/jochona/display_adapter_abi.h \
+          ../src/jochona/display_adapter_guid.h
+
 # extra css
 HTML_EXTRA_STYLESHEET += doc-styles.css
 

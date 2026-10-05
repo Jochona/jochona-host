@@ -14,7 +14,7 @@
   #include <windows.h>
 
   // local includes
-  #include "utility.h"
+  #include "../utility.h"
 #endif
 
 namespace jochona::host_volume {

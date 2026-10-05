@@ -15,8 +15,11 @@
 
 #ifdef _WIN32
   // platform includes
-  #include <setupapi.h>
+  // windows.h must precede setupapi.h (which needs its base types); keep out of include sorting.
+  // clang-format off
   #include <windows.h>
+  #include <setupapi.h>
+  // clang-format on
 
   // local includes -- verbatim copies of the canonical ABI owned by the
   // jochona-display-adapter repository; see provenance headers in each file.
