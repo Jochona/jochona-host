@@ -53,7 +53,9 @@ Anyone is free to contribute to the localization there.
 How does it work?
 
 When a change is made to Sunshine source code, a workflow generates new translation templates
-that get pushed to CrowdIn automatically.
+that get pushed to CrowdIn automatically. (This workflow is gated on `startsWith(github.repository, 'LizardByte/')`
+and does not run on Jochona Host, which lacks the required `GH_BOT_TOKEN`; see
+[Building > CI on this fork](building.md#ci-on-this-fork).)
 
 When translations are updated on CrowdIn, a push gets made to the *l10n_master* branch and a PR is made against the
 *master* branch. Once the PR is merged, all updated translations are part of the project and will be included in the

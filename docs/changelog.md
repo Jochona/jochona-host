@@ -13,6 +13,7 @@ Jochona Host's own changes, tracked separately from upstream Sunshine's release 
 - **Structured failures**: every Jochona-specific rejection (busy, unavailable tuple, invalid parameter, unavailable Host Volume) is a JSON body with a stable `error` code and human-readable `detail`, never a silent fallback or a bare baseline GameStream status code.
 - **Sensitive request logging**: GameStream session keys, pairing material, certificates, stable Client identifiers, cookies, and authorization headers are redacted before request diagnostics reach Host logs.
 - **Baseline compatibility**: every Jochona extension is additive and optional; a client that never sends a Jochona-specific parameter gets exactly Sunshine's baseline GameStream behavior.
+- **CI fixes for the fork**: `ci.yml`'s push trigger now watches `main` instead of upstream's `master` (this fork's default branch), so push-triggered builds actually run; `release-setup` forces `publish_release=false` outside of `LizardByte/` repositories so this fork never attempts to publish a GitHub release or notarize macOS builds without LizardByte's secrets; `localize` and `update-pages` (GH-Pages) are gated to `LizardByte/` repositories only, since they need Crowdin/`GH_BOT_TOKEN` and GitHub Pages this fork doesn't have. See [Building > CI on this fork](building.md#ci-on-this-fork) for details. `_codeql.yml` is centrally managed upstream and still references `master`; left unmodified.
 
 @htmlonly
 <script type="module" src="https://md-block.verou.me/md-block.js"></script>

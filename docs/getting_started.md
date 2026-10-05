@@ -1,10 +1,48 @@
 # Getting Started
 
-The recommended method for running Sunshine is to use the [binaries](#binaries) included in the
-[latest release][latest-release], unless otherwise specified.
+> [!IMPORTANT]
+> Jochona Host has no stable releases and is not published through LizardByte's upstream release channels (GitHub
+> Releases, Flathub, Copr, winget, Homebrew, etc.). See [Jochona Host Install](#jochona-host-install) below for how
+> to actually get Jochona Host running. Everything under [Binaries](#binaries) and [Install](#install) further down
+> describes **upstream Sunshine's** package channels and does not apply to Jochona Host.
 
-[Pre-releases](https://github.com/LizardByte/Sunshine/releases) are also available. These should be considered beta,
-and release artifacts may be missing when merging changes on a faster cadence.
+## Jochona Host Install
+
+Jochona Host ships only as
+[GitHub Actions CI build artifacts](https://github.com/Jochona/jochona-host/actions/workflows/ci.yml); there are no
+GitHub Releases, Flathub, Copr, winget, or Homebrew packages for it.
+
+### Windows (primary target)
+
+**Option A: Download a CI build**
+1. Open a successful run of the `CI` workflow on `main` at the
+   [Jochona/jochona-host Actions tab](https://github.com/Jochona/jochona-host/actions/workflows/ci.yml).
+   `workflow_dispatch` runs of this workflow currently fail during release setup (see
+   [Building > CI on this fork](building.md#ci-on-this-fork)); use a run triggered by a push or pull request
+   instead.
+2. Download the Windows build artifact (NSIS installer, WiX installer, or portable ZIP) from the run summary.
+3. Run the installer, or unzip the portable build and run `sunshine.exe` directly.
+
+**Option B: Build locally with MSYS2**
+Follow [Building > Windows](building.md#windows) to install MSYS2/UCRT64 dependencies, then clone, build, and
+package with `cpack -G NSIS` (installer), `cpack -G WIX` (installer), or `cpack -G ZIP` (portable).
+
+### Linux and macOS
+
+No prebuilt Jochona Host packages exist for Linux or macOS. Download the matching build artifact from a
+[CI run](https://github.com/Jochona/jochona-host/actions/workflows/ci.yml), or build from source following
+[Building > Linux](building.md#linux) or [Building > macOS](building.md#macos).
+
+> [!NOTE]
+> Jochona targets a Windows desktop running Host paired with a Bazzite living-room PC running Jochona Client.
+> Linux/macOS Host builds work through the underlying Sunshine code but are not the focus of Jochona-specific
+> testing.
+
+---
+
+> [!WARNING]
+> The **Binaries** and **Install** sections below describe upstream Sunshine's LizardByte-hosted release channels
+> only. None of them carry Jochona Host — use [Jochona Host Install](#jochona-host-install) above instead.
 
 ## Binaries
 

@@ -24,7 +24,7 @@
 
 ## 🌙 Jochona Host fork
 
-This repository is **Jochona Host**, a fork of [LizardByte/Sunshine](https://github.com/LizardByte/Sunshine). It is fully baseline-GameStream compatible with any Moonlight client: every Jochona extension is additive and optional, and a client that never sends a Jochona-specific parameter gets exactly Sunshine's stock behavior. Badges, releases, and links above point at upstream LizardByte/Sunshine project infrastructure (stars, CI, downloads); Jochona Host is not itself published through those upstream release channels.
+This repository is **Jochona Host**, a fork of [LizardByte/Sunshine](https://github.com/LizardByte/Sunshine). It is fully baseline-GameStream compatible with any Moonlight client: every Jochona extension is additive and optional, and a client that never sends a Jochona-specific parameter gets exactly Sunshine's stock behavior. Badges, releases, and links above point at upstream LizardByte/Sunshine project infrastructure (stars, CI, downloads); Jochona Host is not itself published through those upstream release channels — see [Jochona Host Install](docs/getting_started.md#jochona-host-install) for how to actually get it running (GitHub Actions CI build artifacts, or build from source).
 
 On top of that baseline, Jochona Host is developing in-progress extensions: an authenticated capability manifest (`GET /jochona/v1/capabilities`), exact per-combination Encoder Tuple proof and a bootstrap preflight probe, a Windows Virtual Display Adapter lease lifecycle, Host Volume control, and Beacon-style observer-only pairing. These are tracked as **Unreleased** in the [changelog](docs/changelog.md) and are under active development, not a finished v1.0.
 

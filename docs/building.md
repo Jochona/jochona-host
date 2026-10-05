@@ -205,8 +205,8 @@ For ARM64: To build frontend, you also need to install [Node.JS](https://nodejs.
 Ensure [git](https://git-scm.com) is installed on your system, then clone the repository using the following command:
 
 ```bash
-git clone https://github.com/lizardbyte/sunshine.git --recurse-submodules
-cd sunshine
+git clone https://github.com/Jochona/jochona-host.git --recurse-submodules
+cd jochona-host
 mkdir build
 ```
 
@@ -260,8 +260,30 @@ It may be beneficial to build remotely in some cases. This will enable easier bu
 
 1. Fork the project
 2. Activate workflows
-3. Trigger the *CI* workflow manually
+3. Push a commit to `main`, or open a pull request, to trigger the *CI* workflow. (Manual `workflow_dispatch` runs
+   currently crash during release setup on this fork — see [CI on this fork](#ci-on-this-fork).)
 4. Download the artifacts/binaries from the workflow run summary
+
+## CI on this fork
+
+Jochona Host's GitHub Actions CI (`.github/workflows/ci.yml`) is configured to run on push to `main`, on pull
+requests, and via `workflow_dispatch`. In practice only push and pull-request runs succeed: `workflow_dispatch`
+currently crashes inside the vendored LizardByte `release_setup` action, which expects a push event's `commits`
+payload.
+
+This fork has none of LizardByte's signing/publishing secrets, so `release-setup` forces `publish_release=false`
+outside of `LizardByte/` repositories. That has a few effects on this fork:
+
+- The `release` job (which requires `publish_release == 'true'`) never runs, so CI never attempts to publish a
+  GitHub release.
+- The `localize` and GH-Pages (`update-pages.yml`) workflows gate independently on
+  `startsWith(github.repository, 'LizardByte/')` and are skipped here too — they need Crowdin/`GH_BOT_TOKEN` and
+  GitHub Pages, neither of which this fork has configured.
+- The macOS build job only imports and uses Apple signing/notarization secrets (`APPLE_*`) when
+  `publish_release == 'true'`; with it forced false, the macOS job builds unsigned and does not need those secrets.
+
+To get build artifacts, push to `main` or open a pull request and download the per-platform artifacts from the
+workflow run summary (see [Remote Build](#remote-build) above).
 
 <div class="section_buttons">
 
