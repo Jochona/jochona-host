@@ -57,9 +57,9 @@ namespace config {
     int min_threads;  ///< Minimum number of threads or slices for CPU encoding.
 
     struct {
-      std::string sw_preset;
-      std::string sw_tune;
-      std::optional<int> svtav1_preset;
+      std::string sw_preset;  ///< Encoder preset name for the software x264 encoder (`sw_preset` config option).
+      std::string sw_tune;  ///< Encoder tuning preset for the software x264 encoder (`sw_tune` config option).
+      std::optional<int> svtav1_preset;  ///< SVT-AV1 speed preset parsed from `sw_preset` via sw::svtav1_preset_from_view().
     } sw;  ///< Software encoder options.
 
     nvenc::nvenc_config nv;  ///< NVIDIA NVENC encoder settings.
@@ -68,53 +68,53 @@ namespace config {
     bool nv_sunshine_high_power_mode;  ///< Request NVIDIA high-power mode for Sunshine.
 
     struct {
-      int preset;
-      int multipass;
-      int h264_coder;
-      int aq;
-      int vbv_percentage_increase;
+      int preset;  ///< Legacy NVENC preset derived from `nv.quality_preset` for the pre-SDK encoder path.
+      int multipass;  ///< Legacy NVENC multipass mode derived from `nv.two_pass`.
+      int h264_coder;  ///< Legacy NVENC H.264 entropy coding mode derived from `nv.h264_cavlc`.
+      int aq;  ///< Legacy NVENC adaptive quantization flag copied from `nv.adaptive_quantization`.
+      int vbv_percentage_increase;  ///< Legacy NVENC VBV buffer size increase percentage, copied from `nv.vbv_percentage_increase`.
     } nv_legacy;  ///< Legacy NVIDIA encoder options kept for config compatibility.
 
     struct {
-      std::optional<int> qsv_preset;
-      std::optional<int> qsv_cavlc;
-      bool qsv_slow_hevc;
+      std::optional<int> qsv_preset;  ///< Intel QuickSync encoder preset (`qsv_preset` config option).
+      std::optional<int> qsv_cavlc;  ///< Intel QuickSync H.264 entropy coding mode (`qsv_coder` config option).
+      bool qsv_slow_hevc;  ///< Enable slow/low-power HEVC encoding on older Intel GPUs (`qsv_slow_hevc` config option).
     } qsv;  ///< Intel Quick Sync encoder options.
 
     struct {
-      std::optional<int> amd_usage_h264;
-      std::optional<int> amd_usage_hevc;
-      std::optional<int> amd_usage_av1;
-      std::optional<int> amd_rc_h264;
-      std::optional<int> amd_rc_hevc;
-      std::optional<int> amd_rc_av1;
-      std::optional<int> amd_enforce_hrd;
-      std::optional<int> amd_quality_h264;
-      std::optional<int> amd_quality_hevc;
-      std::optional<int> amd_quality_av1;
-      std::optional<int> amd_preanalysis;
-      std::optional<int> amd_vbaq;
-      int amd_coder;
+      std::optional<int> amd_usage_h264;  ///< AMD AMF H.264 encoder usage profile (`amd_usage` config option).
+      std::optional<int> amd_usage_hevc;  ///< AMD AMF HEVC encoder usage profile (`amd_usage` config option).
+      std::optional<int> amd_usage_av1;  ///< AMD AMF AV1 encoder usage profile (`amd_usage` config option).
+      std::optional<int> amd_rc_h264;  ///< AMD AMF H.264 rate control mode (`amd_rc` config option).
+      std::optional<int> amd_rc_hevc;  ///< AMD AMF HEVC rate control mode (`amd_rc` config option).
+      std::optional<int> amd_rc_av1;  ///< AMD AMF AV1 rate control mode (`amd_rc` config option).
+      std::optional<int> amd_enforce_hrd;  ///< Enable Hypothetical Reference Decoder enforcement to constrain target bitrate (`amd_enforce_hrd` config option).
+      std::optional<int> amd_quality_h264;  ///< AMD AMF H.264 quality profile (`amd_quality` config option).
+      std::optional<int> amd_quality_hevc;  ///< AMD AMF HEVC quality profile (`amd_quality` config option).
+      std::optional<int> amd_quality_av1;  ///< AMD AMF AV1 quality profile (`amd_quality` config option).
+      std::optional<int> amd_preanalysis;  ///< Enable AMD AMF preanalysis (`amd_preanalysis` config option).
+      std::optional<int> amd_vbaq;  ///< Enable AMD AMF Variance Based Adaptive Quantization (`amd_vbaq` config option).
+      int amd_coder;  ///< AMD AMF H.264 entropy coding mode (`amd_coder` config option).
     } amd;  ///< AMD AMF encoder options.
 
     struct {
-      int vt_allow_sw;
-      int vt_require_sw;
-      int vt_realtime;
-      int vt_coder;
+      int vt_allow_sw;  ///< Allow VideoToolbox to fall back to software encoding (`vt_software` config option).
+      int vt_require_sw;  ///< Force VideoToolbox to use software encoding (`vt_software` config option).
+      int vt_realtime;  ///< Enable realtime VideoToolbox encoding (`vt_realtime` config option).
+      int vt_coder;  ///< VideoToolbox H.264 entropy coding mode (`vt_coder` config option).
     } vt;  ///< VideoToolbox encoder options.
 
     struct {
-      std::optional<int> blbrc;
-      std::optional<int> vaapi_quality;
-      std::optional<int> vaapi_rc;
-      std::string vaapi_rc_str;
-      bool strict_rc_buffer;
+      std::optional<int> blbrc;  ///< Enable block-level bitrate control (`vaapi_blbrc` config option).
+      std::optional<int> vaapi_quality;  ///< VA-API quality profile (`vaapi_quality` config option).
+      std::optional<int> vaapi_rc;  ///< VA-API rate control mode parsed from `vaapi_rc_str`.
+      std::string vaapi_rc_str;  ///< VA-API rate control mode name as configured (`vaapi_rc` config option).
+      bool strict_rc_buffer;  ///< Enable strict rate-control buffering to avoid dropped frames (`vaapi_strict_rc_buffer` config option).
     } vaapi;  ///< VA-API encoder options.
 
     struct {
-      int tune;  // 0=default, 1=hq, 2=ll, 3=ull, 4=lossless
-      int rc_mode;  // 0=driver, 1=cqp, 2=cbr, 4=vbr
+      int tune;  ///< Encoder tuning preset (`vk_tune` config option): 0=default, 1=hq, 2=ll, 3=ull, 4=lossless.
+      int rc_mode;  ///< Encoder rate control mode (`vk_rc_mode` config option): 0=driver, 1=cqp, 2=cbr, 4=vbr.
     } vk;  ///< Vulkan encoder options.
 
     std::string capture;  ///< Capture backend name selected by configuration.

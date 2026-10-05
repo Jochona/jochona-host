@@ -32,6 +32,8 @@ namespace jochona::host_volume {
 
   /**
    * @brief Query the current host output volume.
+   *
+   * @return The current host-volume control status.
    */
   [[nodiscard]] status_t get();
 
@@ -51,6 +53,9 @@ namespace jochona::host_volume {
    * `{"available": false}` reports `min`/`max`/`current` as `null`, matching
    * the manifest's `runtimeControls.hostVolume` null convention for an
    * unavailable control.
+   *
+   * @param status Host-volume status to serialize.
+   * @return The JSON body for `GET`/`PUT /jochona/v1/volume`.
    */
   [[nodiscard]] nlohmann::json to_json(const status_t &status);
 
@@ -65,6 +70,9 @@ namespace jochona::host_volume {
   /**
    * @brief Serialize a rejection_t to the exact JSON body Jochona Client
    *        expects on a non-2xx `/jochona/v1/volume` response.
+   *
+   * @param rejection Rejection to serialize.
+   * @return The JSON body for the non-2xx `/jochona/v1/volume` response.
    */
   [[nodiscard]] std::string to_json(const rejection_t &rejection);
 

@@ -45,6 +45,7 @@ namespace jochona::encoder {
     std::string virtual_display_adapter_version;  ///< Installed Jochona Display Adapter version, or "not-installed".
     std::string host_build;  ///< Jochona Host build/version string (PROJECT_VERSION).
 
+    /// @return True if every fingerprint field is equal.
     bool operator==(const environment_fingerprint_t &) const = default;
   };
 
@@ -56,11 +57,12 @@ namespace jochona::encoder {
     std::string codec;  ///< "h264" | "hevc" | "av1".
     std::string profile;  ///< "main8" | "main10".
     std::string chroma;  ///< "420" | "444".
-    std::uint32_t width = 0;
-    std::uint32_t height = 0;
-    std::uint32_t fps = 0;
-    bool hdr = false;
+    std::uint32_t width = 0;  ///< Frame width in pixels.
+    std::uint32_t height = 0;  ///< Frame height in pixels.
+    std::uint32_t fps = 0;  ///< Frame rate in frames per second.
+    bool hdr = false;  ///< True when the tuple uses HDR.
 
+    /// @return True if every key field is equal.
     bool operator==(const tuple_key_t &) const = default;
   };
 
@@ -70,7 +72,7 @@ namespace jochona::encoder {
    */
   struct proven_tuple_t {
     std::string id;  ///< Stable id, e.g. "nvenc-av1-main10-420-3840x2160-120-hdr".
-    tuple_key_t key;
+    tuple_key_t key;  ///< Encoder-tuple identity (backend/codec/profile/chroma/resolution/fps/HDR).
     environment_fingerprint_t environment;  ///< Proof environment captured with this tuple.
     std::vector<std::string> captures;  ///< Subset of {"physical", "virtual"} independently proven for this key.
     std::string method = "vendor-query+probe-frames";  ///< Proof method, per the capabilities schema.
@@ -81,6 +83,9 @@ namespace jochona::encoder {
    * @brief Build the stable, human-legible tuple id for a key.
    *
    * Format: "{backend}-{codec}-{profile}-{chroma}-{width}x{height}-{fps}-{hdr|sdr}".
+   *
+   * @param key Tuple identity to format.
+   * @return The stable id for `key`.
    */
   std::string make_stable_id(const tuple_key_t &key);
 
@@ -93,6 +98,7 @@ namespace jochona::encoder {
    */
   class store_t {
   public:
+    /// @return The process-wide proven-tuple store instance.
     static store_t &instance();
 
     /**
@@ -100,6 +106,8 @@ namespace jochona::encoder {
      *
      * A changed environment clears all older tuples even when every new
      * exact probe fails and therefore records no replacement tuple.
+     *
+     * @param environment New proof environment.
      */
     void begin_environment(const environment_fingerprint_t &environment);
 
@@ -112,17 +120,25 @@ namespace jochona::encoder {
      * adds `capture` to its proven-captures set (if not already present)
      * and refreshes `verified_at`.
      *
+     * @param key Proven encoder-tuple identity.
      * @param capture Either "physical" or "virtual".
+     * @param environment Proof environment the probe ran under.
+     * @param verified_at Time the probe succeeded.
      */
     void record_success(const tuple_key_t &key, std::string_view capture, const environment_fingerprint_t &environment, std::chrono::system_clock::time_point verified_at = std::chrono::system_clock::now());
 
     /**
      * @brief Every currently advertised (i.e. still-valid) proven tuple.
+     *
+     * @return Every currently advertised proven tuple.
      */
     [[nodiscard]] std::vector<proven_tuple_t> advertised_tuples() const;
 
     /**
      * @brief Look up a proven tuple by its stable id.
+     *
+     * @param id Stable tuple id to look up.
+     * @return The proven tuple, if `id` is currently proven.
      */
     [[nodiscard]] std::optional<proven_tuple_t> find(std::string_view id) const;
 
@@ -134,6 +150,9 @@ namespace jochona::encoder {
      *        `encoder_tuple_unavailable` response. Excludes `requested_id`
      *        itself. Empty when `requested_id` does not parse as a
      *        well-formed tuple id.
+     *
+     * @param requested_id Requested tuple id to find alternatives for.
+     * @return Verified alternative tuple ids at the same resolution/fps.
      */
     [[nodiscard]] std::vector<std::string> alternatives_for(std::string_view requested_id) const;
 

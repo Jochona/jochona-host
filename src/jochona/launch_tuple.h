@@ -44,12 +44,17 @@ namespace jochona::launch {
   /**
    * @brief Serialize a tuple_rejection_t to the exact JSON body Jochona
    *        Client expects on HTTP 409.
+   *
+   * @param rejection Rejection to serialize.
+   * @return The HTTP 409 JSON body for `rejection`.
    */
   std::string to_json(const tuple_rejection_t &rejection);
 
   /**
    * @brief The `host_busy` rejection body for a jochonaTuple-aware launch
    *        attempted while a session is already active.
+   *
+   * @return The `host_busy` rejection body.
    */
   tuple_rejection_t host_busy_rejection();
 
@@ -63,6 +68,7 @@ namespace jochona::launch {
    * @param height Probed display height in pixels.
    * @param fps Probed display refresh rate.
    * @param hdr Whether the active display mode uses HDR.
+   * @return The proof-environment fingerprint for the given mode.
    */
   encoder::environment_fingerprint_t current_environment_fingerprint(
     std::uint32_t width,
@@ -107,6 +113,9 @@ namespace jochona::launch {
    * ANNOUNCE that requests anything else, since a client is not obligated
    * to actually request the tuple it pinned.
    *
+   * @param requested_id Client-requested `jochonaTuple` id.
+   * @param session Launch session to validate/pin against.
+   * @param capture_virtual True when the session requests a leased virtual display.
    * @return std::nullopt when the tuple is accepted and pinned; otherwise
    *         an `encoder_tuple_unavailable` rejection with verified
    *         alternatives at the same resolution/fps/HDR shape.
@@ -124,6 +133,7 @@ namespace jochona::launch {
    * resulting lease is held in process-wide session state (capacity is 1
    * active session) until release_active_virtual_display_lease() is called.
    *
+   * @param session Launch session whose requested mode is leased/configured.
    * @return std::nullopt on success; otherwise an `encoder_tuple_unavailable`
    *         rejection (stage "virtual_display_lease") describing why the
    *         adapter could not be leased/configured.
@@ -141,6 +151,8 @@ namespace jochona::launch {
 
   /**
    * @brief True if a virtual-display lease is currently held for the active session.
+   *
+   * @return True if a virtual-display lease is currently held.
    */
   [[nodiscard]] bool virtual_display_lease_active();
 
@@ -154,10 +166,10 @@ namespace jochona::launch {
     std::string codec;  ///< "h264" | "hevc" | "av1".
     std::string profile;  ///< "main8" | "main10".
     std::string chroma;  ///< "420" | "444".
-    std::uint32_t width = 0;
-    std::uint32_t height = 0;
-    std::uint32_t fps = 0;
-    bool hdr = false;
+    std::uint32_t width = 0;  ///< Frame width in pixels.
+    std::uint32_t height = 0;  ///< Frame height in pixels.
+    std::uint32_t fps = 0;  ///< Frame rate in frames per second.
+    bool hdr = false;  ///< True when the tuple uses HDR.
   };
 
   /**

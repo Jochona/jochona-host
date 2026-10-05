@@ -362,14 +362,14 @@ namespace platf::dxgi {
       union {
         struct
         {
-          UINT HwSchSupported : 1;
-          UINT HwSchEnabled : 1;
-          UINT HwSchEnabledByDefault : 1;
-          UINT IndependentVidPnVSyncControl : 1;
-          UINT Reserved : 28;
+          UINT HwSchSupported : 1;  ///< Hardware scheduling is supported by the GPU/driver.
+          UINT HwSchEnabled : 1;  ///< Hardware scheduling is currently enabled.
+          UINT HwSchEnabledByDefault : 1;  ///< Hardware scheduling is enabled by default.
+          UINT IndependentVidPnVSyncControl : 1;  ///< Independent VidPn source vsync control is supported.
+          UINT Reserved : 28;  ///< Reserved bits.
         };
 
-        UINT Value;
+        UINT Value;  ///< Raw 32-bit value aliasing the bitfield above.
       };
     } D3DKMT_WDDM_2_7_CAPS;  ///< Alias for D3 DKMT WDDM 2 7 CAPS.
 

@@ -294,9 +294,9 @@ namespace platf {
       std::string requested_sink;  ///< Requested sink.
 
       struct {
-        std::uint32_t stereo = PA_INVALID_INDEX;
-        std::uint32_t surround51 = PA_INVALID_INDEX;
-        std::uint32_t surround71 = PA_INVALID_INDEX;
+        std::uint32_t stereo = PA_INVALID_INDEX;  ///< Module index of the Sunshine stereo null sink, or `PA_INVALID_INDEX`.
+        std::uint32_t surround51 = PA_INVALID_INDEX;  ///< Module index of the Sunshine 5.1 surround null sink, or `PA_INVALID_INDEX`.
+        std::uint32_t surround71 = PA_INVALID_INDEX;  ///< Module index of the Sunshine 7.1 surround null sink, or `PA_INVALID_INDEX`.
       } index;  ///< PulseAudio module indexes for Sunshine-created null sinks.
 
       std::unique_ptr<safe::event_t<ctx_event_e>> events;  ///< Event queue receiving PulseAudio context state changes.

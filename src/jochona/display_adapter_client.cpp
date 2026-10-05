@@ -150,12 +150,24 @@ namespace jochona::display_adapter {
 
   }  // namespace
 
+  /// Shared device-handle state for client_t, also referenced by live
+  /// lease_handle_t instances to issue IOCTLs against the same handle.
   struct client_t::impl_t {
     std::mutex mutex;  ///< Serializes access to `device`.
     HANDLE device = INVALID_HANDLE_VALUE;  ///< Lazily opened, cached device handle.
 
-    /// Send an IOCTL on the cached handle; closes+resets the handle on a
-    /// handle-level failure so the next call reopens it. Caller holds `mutex`.
+    /**
+     * @brief Send an IOCTL on the cached handle; closes+resets the handle on a
+     *        handle-level failure so the next call reopens it. Caller holds `mutex`.
+     *
+     * @param code IOCTL control code.
+     * @param in Input buffer, or nullptr if none.
+     * @param in_size Size of `in` in bytes.
+     * @param out Output buffer, or nullptr if none.
+     * @param out_size Size of `out` in bytes.
+     * @param bytes_returned Receives the number of bytes actually written to `out`.
+     * @return True on success.
+     */
     BOOL send(DWORD code, const void *in, DWORD in_size, void *out, DWORD out_size, DWORD &bytes_returned) {
       BOOL ok = DeviceIoControl(device, code, const_cast<void *>(in), in_size, out, out_size, &bytes_returned, nullptr);
       if (!ok && is_handle_level_failure(GetLastError())) {
@@ -172,15 +184,17 @@ namespace jochona::display_adapter {
     }
   };
 
+  /// Watchdog state for one held lease, including the background ping thread.
   struct lease_handle_t::impl_t {
-    std::shared_ptr<client_t::impl_t> client_impl;
-    JochonaGuid128 lease_token {};
-    std::uint32_t slot_id = 0;
-    std::uint32_t watchdog_timeout_ms = 5000;
-    std::atomic<bool> stop_flag {false};
-    std::atomic<bool> released {false};
-    std::thread watchdog_thread;
+    std::shared_ptr<client_t::impl_t> client_impl;  ///< Shared client device-handle state.
+    JochonaGuid128 lease_token {};  ///< Lease token returned by LEASE_SLOT, required by later calls.
+    std::uint32_t slot_id = 0;  ///< Leased slot id (always 0 for protocol v1.0).
+    std::uint32_t watchdog_timeout_ms = 5000;  ///< Driver-reported watchdog timeout.
+    std::atomic<bool> stop_flag {false};  ///< Signals the watchdog thread to exit.
+    std::atomic<bool> released {false};  ///< True once release() has run; makes release() idempotent.
+    std::thread watchdog_thread;  ///< Background thread that calls ping() at half the watchdog timeout.
 
+    /// Send one best-effort watchdog ping for this lease; a missed ping is reclaimed by the driver's own timeout.
     void ping() {
       JochonaWatchdogPingIn in {};
       in.RequestedVersion = current_protocol_version();
@@ -198,6 +212,7 @@ namespace jochona::display_adapter {
       client_impl->send(IOCTL_JOCHONA_WATCHDOG_PING, &in, sizeof(in), nullptr, 0, bytes);
     }
 
+    /// Spawn the background thread that calls ping() at half the watchdog timeout interval until stop_flag is set.
     void start_watchdog() {
       auto interval = std::chrono::milliseconds(std::max<std::uint32_t>(500, watchdog_timeout_ms / 2));
       watchdog_thread = std::thread([this, interval] {

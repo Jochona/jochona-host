@@ -212,34 +212,34 @@ namespace platf {
 
     union {
       struct {
-        std::uint16_t lowfreq;
-        std::uint16_t highfreq;
-      } rumble;
+        std::uint16_t lowfreq;  ///< Low-frequency rumble motor intensity.
+        std::uint16_t highfreq;  ///< High-frequency rumble motor intensity.
+      } rumble;  ///< Rumble motor intensities, valid when `type` is `rumble`.
 
       struct {
-        std::uint16_t left_trigger;
-        std::uint16_t right_trigger;
-      } rumble_triggers;
+        std::uint16_t left_trigger;  ///< Left trigger rumble motor intensity.
+        std::uint16_t right_trigger;  ///< Right trigger rumble motor intensity.
+      } rumble_triggers;  ///< Trigger rumble motor intensities, valid when `type` is `rumble_triggers`.
 
       struct {
-        std::uint16_t report_rate;
-        std::uint8_t motion_type;
-      } motion_event_state;
+        std::uint16_t report_rate;  ///< Motion event report rate.
+        std::uint8_t motion_type;  ///< Motion type to report.
+      } motion_event_state;  ///< Motion event state, valid when `type` is `set_motion_event_state`.
 
       struct {
-        std::uint8_t r;
-        std::uint8_t g;
-        std::uint8_t b;
-      } rgb_led;
+        std::uint8_t r;  ///< Red color channel value.
+        std::uint8_t g;  ///< Green color channel value.
+        std::uint8_t b;  ///< Blue color channel value.
+      } rgb_led;  ///< RGB LED color, valid when `type` is `set_rgb_led`.
 
       struct {
-        uint16_t controllerNumber;
-        uint8_t event_flags;
-        uint8_t type_left;
-        uint8_t type_right;
-        std::array<uint8_t, 10> left;
-        std::array<uint8_t, 10> right;
-      } adaptive_triggers;
+        uint16_t controllerNumber;  ///< Controller identifier associated with this message.
+        uint8_t event_flags;  ///< Event flags for the adaptive triggers update.
+        uint8_t type_left;  ///< Left trigger adaptive effect type.
+        uint8_t type_right;  ///< Right trigger adaptive effect type.
+        std::array<uint8_t, 10> left;  ///< Left trigger effect payload.
+        std::array<uint8_t, 10> right;  ///< Right trigger effect payload.
+      } adaptive_triggers;  ///< Adaptive trigger payload, valid when `type` is `set_adaptive_triggers`.
     } data;  ///< Controller feedback payload for the selected feedback type.
   };
 

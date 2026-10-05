@@ -85,6 +85,9 @@ namespace jochona::display_adapter {
 
   /**
    * @brief Convert an error_e to a stable lowercase snake_case token for logs/JSON.
+   *
+   * @param error Error to convert.
+   * @return The stable lowercase snake_case token for `error`.
    */
   std::string_view to_string(error_e error);
 
@@ -100,6 +103,8 @@ namespace jochona::display_adapter {
   public:
     /**
      * @brief Access the process-wide client instance.
+     *
+     * @return The process-wide client instance.
      */
     static client_t &instance();
 
@@ -112,6 +117,8 @@ namespace jochona::display_adapter {
      * Safe to call at any time, including while a lease is held elsewhere
      * in the process; used to populate the capabilities manifest's
      * `virtualDisplay.installed`/`healthy` fields honestly.
+     *
+     * @return The driver's installation/protocol-health status.
      */
     [[nodiscard]] manifest_status_t probe();
 
@@ -122,6 +129,8 @@ namespace jochona::display_adapter {
      * Safe to call at any time, including while a lease is held elsewhere
      * in the process. Returns `std::nullopt` when the driver is not
      * installed or unreachable; never fabricates slot data.
+     *
+     * @return The driver's slot pool, or `std::nullopt` when unreachable.
      */
     [[nodiscard]] std::optional<std::vector<slot_status_t>> enumerate_slots();
 
@@ -164,7 +173,13 @@ namespace jochona::display_adapter {
    */
   class lease_handle_t {
   public:
+    /// Transfer ownership of another handle's lease; the moved-from handle releases nothing on destruction.
+    /// @param other Handle to move from.
     lease_handle_t(lease_handle_t &&other) noexcept;
+
+    /// Transfer ownership of another handle's lease; the moved-from handle releases nothing on destruction.
+    /// @param other Handle to move from.
+    /// @return `*this`.
     lease_handle_t &operator=(lease_handle_t &&other) noexcept;
     lease_handle_t(const lease_handle_t &) = delete;
     lease_handle_t &operator=(const lease_handle_t &) = delete;
@@ -173,6 +188,7 @@ namespace jochona::display_adapter {
     /**
      * @brief Configure the leased slot with the given mode.
      *
+     * @param mode Display mode to configure the slot with.
      * @return std::nullopt on success, or the error_e on failure. On error the lease
      *         itself remains held; the caller may retry with a different mode.
      */
@@ -188,6 +204,8 @@ namespace jochona::display_adapter {
 
     /**
      * @brief True if this handle currently owns a live lease.
+     *
+     * @return True if this handle currently owns a live lease.
      */
     [[nodiscard]] bool valid() const;
 

@@ -30,9 +30,9 @@ namespace upnp {
    */
   struct mapping_t {
     struct {
-      std::string wan;
-      std::string lan;
-      std::string proto;
+      std::string wan;  ///< WAN-side port number of the mapping, as a string.
+      std::string lan;  ///< LAN-side port number of the mapping, as a string.
+      std::string proto;  ///< Protocol of the mapping ("TCP" or "UDP").
     } port;  ///< WAN/LAN/protocol tuple for the mapped port.
 
     std::string description;  ///< Human-readable UPnP lease description advertised to the gateway.

@@ -97,9 +97,9 @@ namespace nvhttp {
    */
   struct pair_session_t {
     struct {
-      std::string uniqueID = {};
-      std::string cert = {};
-      std::string name = {};
+      std::string uniqueID = {};  ///< Client's unique identifier supplied during pairing.
+      std::string cert = {};  ///< Client's PEM certificate exchanged during pairing.
+      std::string name = {};  ///< Client-supplied display name.
 
       /**
        * @brief True when the client requested Beacon-style observer-only
@@ -125,8 +125,8 @@ namespace nvhttp {
       util::Either<
         std::shared_ptr<typename SimpleWeb::ServerBase<SimpleWeb::HTTP>::Response>,
         std::shared_ptr<typename SimpleWeb::ServerBase<SunshineHTTPS>::Response>>
-        response;
-      std::string salt = {};
+        response;  ///< Deferred HTTP(S) response to resume once the PIN is entered.
+      std::string salt = {};  ///< Salt used to derive the pairing AES key once the PIN is available.
     } async_insert_pin;  ///< Async insert pin.
 
     /**

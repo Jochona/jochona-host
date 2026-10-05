@@ -1,8 +1,8 @@
 /**
  * @file src/jochona/capabilities.h
  * @brief Typed Jochona capability/permission model backing GET /jochona/v1/capabilities
- *        and the Apollo-compatible <Permission>/<VirtualDisplayCapable>/
- *        <VirtualDisplayDriverReady> tags on /serverinfo.
+ *        and the Apollo-compatible `<Permission>`/`<VirtualDisplayCapable>`/
+ *        `<VirtualDisplayDriverReady>` tags on /serverinfo.
  *
  * Jochona Host is family "Jochona" but stays wire-compatible with Apollo's
  * /serverinfo permission model so an Apollo-aware client (or Jochona Client
@@ -51,38 +51,44 @@ namespace jochona::capability {
    *        reproduced; only the leaf bits a policy can derive to.
    */
   enum apollo_perm_e : std::uint32_t {
-    apollo_perm_none = 0,
+    apollo_perm_none = 0,  ///< No Apollo permission bits.
 
-    apollo_perm_input_controller = 1u << 8,
-    apollo_perm_input_touch = 1u << 9,
-    apollo_perm_input_pen = 1u << 10,
-    apollo_perm_input_mouse = 1u << 11,
-    apollo_perm_input_keyboard = 1u << 12,
+    apollo_perm_input_controller = 1u << 8,  ///< Controller input.
+    apollo_perm_input_touch = 1u << 9,  ///< Touch input.
+    apollo_perm_input_pen = 1u << 10,  ///< Pen input.
+    apollo_perm_input_mouse = 1u << 11,  ///< Mouse input.
+    apollo_perm_input_keyboard = 1u << 12,  ///< Keyboard input.
 
-    apollo_perm_clipboard_set = 1u << 16,
-    apollo_perm_clipboard_read = 1u << 17,
-    apollo_perm_file_upload = 1u << 18,
-    apollo_perm_file_download = 1u << 19,
-    apollo_perm_server_command = 1u << 20,
+    apollo_perm_clipboard_set = 1u << 16,  ///< Set clipboard contents.
+    apollo_perm_clipboard_read = 1u << 17,  ///< Read clipboard contents.
+    apollo_perm_file_upload = 1u << 18,  ///< Upload files to the host.
+    apollo_perm_file_download = 1u << 19,  ///< Download files from the host.
+    apollo_perm_server_command = 1u << 20,  ///< General administrative/server-command operations.
 
-    apollo_perm_list_apps = 1u << 24,
-    apollo_perm_view_stream = 1u << 25,
-    apollo_perm_launch_apps = 1u << 26,
+    apollo_perm_list_apps = 1u << 24,  ///< List available applications.
+    apollo_perm_view_stream = 1u << 25,  ///< View the active stream.
+    apollo_perm_launch_apps = 1u << 26,  ///< Launch applications/sessions.
   };
 
   /**
    * @brief All canonical permissions, in the stable order they are
    *        advertised in the manifest.
+   *
+   * @return The canonical permission list.
    */
   const std::vector<permission_e> &all_permissions();
 
   /**
    * @brief The wire manifest string for a canonical permission, e.g. "session.launch".
+   *
+   * @param permission Canonical permission to convert.
+   * @return The permission's wire manifest string.
    */
   std::string_view manifest_string(permission_e permission);
 
   /**
    * @brief Parse a manifest string back to its canonical permission.
+   * @param value Wire manifest string, e.g. "session.launch".
    * @return std::nullopt when the string does not name a known permission.
    */
   std::optional<permission_e> permission_from_manifest_string(std::string_view value);
@@ -96,6 +102,9 @@ namespace jochona::capability {
    * derive to ServerCommand, Apollo's general administrative-operation bit,
    * since Apollo has no dedicated volume-control leaf bit. `host.observe`
    * derives to apollo_perm_none by design.
+   *
+   * @param permission Canonical permission to derive from.
+   * @return Bitwise OR of the Apollo PERM bits this permission grants.
    */
   std::uint32_t apollo_bits(permission_e permission);
 
@@ -107,15 +116,20 @@ namespace jochona::capability {
     permission_set_t() = default;
 
     /// Grant a canonical permission. Idempotent.
+    /// @param permission Permission to grant.
     void grant(permission_e permission);
 
     /// True if `permission` has been granted.
+    /// @param permission Permission to check.
+    /// @return True if `permission` has been granted.
     [[nodiscard]] bool has(permission_e permission) const;
 
     /// Manifest strings for every granted permission, in canonical order.
+    /// @return The manifest strings for every granted permission.
     [[nodiscard]] std::vector<std::string> manifest_strings() const;
 
     /// Bitwise OR of apollo_bits() across every granted permission.
+    /// @return The combined Apollo PERM bitmask for this grant.
     [[nodiscard]] std::uint32_t apollo_permission_bits() const;
 
     /**
@@ -127,12 +141,16 @@ namespace jochona::capability {
      * launch/stop a session and read/write host volume. This does not
      * include `host.observe`, which is reserved for Beacon's
      * observer-only enrollment path.
+     *
+     * @return The default paired-client permission grant.
      */
     static permission_set_t default_paired_client_grant();
 
     /**
      * @brief The grant used for Beacon-style observer-only enrollment:
      *        `host.observe` alone, deriving to zero Apollo bits.
+     *
+     * @return The observer-only permission grant.
      */
     static permission_set_t observer_grant();
 

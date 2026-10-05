@@ -941,6 +941,7 @@ namespace nvhttp {
    * handler that can mutate session/app state or return non-public app
    * inventory data MUST check this immediately after print_req() -- see
    * the observer-coverage table above the route table in start().
+   * @return True if the authenticating certificate is a persisted observer-only enrollment.
    */
   bool is_observer_only_client() {
     return is_observer_only_cert(last_verified_client_cert);
@@ -955,6 +956,7 @@ namespace nvhttp {
    * certificate cannot be found in the paired-client list, which preserves
    * the full-control default every client received before this feature
    * existed.
+   * @return The permission set to apply to the current request's client.
    */
   jochona::capability::permission_set_t jochona_permission_grant_for_current_client() {
     return is_observer_only_client() ?

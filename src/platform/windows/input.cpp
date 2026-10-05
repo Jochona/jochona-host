@@ -110,8 +110,8 @@ namespace platf {
     feedback_queue_t feedback_queue;  ///< Feedback queue.
 
     union {
-      XUSB_REPORT x360;
-      DS4_REPORT_EX ds4;
+      XUSB_REPORT x360;  ///< Xbox 360 HID report, active when the gamepad emulates an Xbox controller.
+      DS4_REPORT_EX ds4;  ///< DualShock 4 HID report, active when the gamepad emulates a DS4 controller.
     } report;  ///< Current HID report for the virtual controller..
 
     // Map from pointer ID to pointer index
