@@ -15,6 +15,7 @@ on:
 jobs:
   localize:
     name: Update Localization
+    if: startsWith(github.repository, 'LizardByte/')  # Jochona: needs GH_BOT_TOKEN, which this fork lacks
     permissions:
       contents: read
     uses: LizardByte/lizardbyte-common/.github/workflows/localize.yml@master

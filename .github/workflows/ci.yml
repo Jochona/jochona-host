@@ -23,7 +23,9 @@ jobs:
   release-setup:
     name: Release Setup
     outputs:
-      publish_release: ${{ steps.release-setup.outputs.publish_release }}
+      # Jochona: this fork has no Apple/Azure signing certs or bot tokens, so it never publishes through
+      # LizardByte infrastructure; force publish_release=false outside LizardByte/ (matches `release` job gate).
+      publish_release: ${{ startsWith(github.repository, 'LizardByte/') && steps.release-setup.outputs.publish_release || 'false' }}
       release_body: ${{ steps.release-setup.outputs.release_body }}
       release_commit: ${{ steps.release-setup.outputs.release_commit }}
       release_generate_release_notes: ${{ steps.release-setup.outputs.release_generate_release_notes }}
