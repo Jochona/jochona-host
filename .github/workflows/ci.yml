@@ -26,11 +26,12 @@ jobs:
       # Jochona: this fork has no Apple/Azure signing certs or bot tokens, so it never publishes through
       # LizardByte infrastructure; force publish_release=false outside LizardByte/ (matches `release` job gate).
       publish_release: ${{ startsWith(github.repository, 'LizardByte/') && steps.release-setup.outputs.publish_release || 'false' }}
-      release_body: ${{ steps.release-setup.outputs.release_body }}
-      release_commit: ${{ steps.release-setup.outputs.release_commit }}
-      release_generate_release_notes: ${{ steps.release-setup.outputs.release_generate_release_notes }}
-      release_tag: ${{ steps.release-setup.outputs.release_tag }}
-      release_version: ${{ steps.release-setup.outputs.release_version }}
+      release_body: ${{ steps.release-setup.outputs.release_body || steps.manual.outputs.release_body }}
+      release_commit: ${{ steps.release-setup.outputs.release_commit || steps.manual.outputs.release_commit }}
+      release_generate_release_notes: >-
+        ${{ steps.release-setup.outputs.release_generate_release_notes || steps.manual.outputs.release_generate_release_notes }}
+      release_tag: ${{ steps.release-setup.outputs.release_tag || steps.manual.outputs.release_tag }}
+      release_version: ${{ steps.release-setup.outputs.release_version || steps.manual.outputs.release_version }}
     permissions:
       contents: write
     runs-on: ubuntu-latest
@@ -38,11 +39,29 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
+      # Jochona: LizardByte's release_setup only understands push/pull_request payloads (reads event["commits"]),
+      # and crashes with KeyError on workflow_dispatch. Manual runs get local, non-publishing metadata instead.
       - name: Release Setup
         id: release-setup
+        if: github.event_name != 'workflow_dispatch'
         uses: LizardByte/actions/actions/release_setup@d0ae7f82215a479fe2b74f4088c53ee6460513dd  # v2026.728.214955
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Release Setup (manual run)
+        id: manual
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          {
+            echo "publish_release=false"
+            echo "release_body="
+            echo "release_commit=${GITHUB_SHA}"
+            echo "release_generate_release_notes=false"
+            echo "release_tag=v0.0.${RUN_NUMBER}"
+            echo "release_version=0.0.${RUN_NUMBER}"
+          } >> "${GITHUB_OUTPUT}"
 
   build-docker:
     name: Docker
