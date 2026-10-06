@@ -47,6 +47,12 @@ file(GLOB NVPREFS_FILES CONFIGURE_DEPENDS
 # vigem
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/third-party/ViGEmClient/include")
 
+# libvirtualgamepad: the control-protocol client for the VHF (Virtual HID Framework) gamepad
+# driver, used to emulate a DualSense (DS5) controller on Windows. Only the header-only protocol
+# and the small SetupAPI client are compiled here; the driver itself is a separate install, see
+# docs/getting_started.md#windows.
+include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/third-party/libvirtualgamepad/include")
+
 # sunshine icon
 if(NOT DEFINED SUNSHINE_ICON_PATH)
     set(SUNSHINE_ICON_PATH "${CMAKE_SOURCE_DIR}/sunshine.ico")
@@ -72,6 +78,10 @@ set(PLATFORM_TARGET_FILES
         "${CMAKE_SOURCE_DIR}/src/platform/windows/misc.h"
         "${CMAKE_SOURCE_DIR}/src/platform/windows/misc.cpp"
         "${CMAKE_SOURCE_DIR}/src/platform/windows/input.cpp"
+        "${CMAKE_SOURCE_DIR}/src/platform/windows/vhf_gamepad.h"
+        "${CMAKE_SOURCE_DIR}/src/platform/windows/vhf_gamepad.cpp"
+        "${CMAKE_SOURCE_DIR}/src/platform/windows/vhf_gamepad_policy.h"
+        "${CMAKE_SOURCE_DIR}/src/platform/windows/vhf_gamepad_policy.cpp"
         "${CMAKE_SOURCE_DIR}/src/platform/windows/display.h"
         "${CMAKE_SOURCE_DIR}/src/platform/windows/display_base.cpp"
         "${CMAKE_SOURCE_DIR}/src/platform/windows/display_vram.cpp"
@@ -85,6 +95,9 @@ set(PLATFORM_TARGET_FILES
         "${CMAKE_SOURCE_DIR}/third-party/ViGEmClient/include/ViGEm/Common.h"
         "${CMAKE_SOURCE_DIR}/third-party/ViGEmClient/include/ViGEm/Util.h"
         "${CMAKE_SOURCE_DIR}/third-party/ViGEmClient/include/ViGEm/km/BusShared.h"
+        "${CMAKE_SOURCE_DIR}/third-party/libvirtualgamepad/client/client.cpp"
+        "${CMAKE_SOURCE_DIR}/third-party/libvirtualgamepad/include/libvirtualgamepad/client.h"
+        "${CMAKE_SOURCE_DIR}/third-party/libvirtualgamepad/include/libvirtualgamepad/protocol.h"
         ${NVPREFS_FILES})
 
 set(OPENSSL_LIBRARIES

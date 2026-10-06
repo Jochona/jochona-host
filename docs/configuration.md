@@ -340,7 +340,7 @@ editing the `conf` file in a text editor. Use the examples as reference.
     <tr>
         <td>ds5</td>
         <td>DualShock 5 controller (PS5)
-            @note{This option applies to FreeBSD and Linux only.}</td>
+            @note{This option applies to Windows, FreeBSD, and Linux only.}</td>
     </tr>
     <tr>
         <td>switch</td>

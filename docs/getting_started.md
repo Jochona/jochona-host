@@ -517,6 +517,28 @@ recommended to restart your computer.
 
 ![ViGEmBus Installation](images/vigembus-installer.png)
 
+#### DualSense on Windows
+ViGEmBus can emulate an Xbox 360 or DualShock 4 controller, but it has no DualSense (PS5) target
+type. To emulate a real DualSense — with touchpad, motion sensors, battery, player LEDs, rumble,
+and adaptive triggers — install the free, MIT-licensed
+[libvirtualgamepad](https://github.com/Nonary/libvirtualgamepad) driver by Nonary instead:
+
+1. Download the latest `libvirtualgamepad-*-windows-x64.zip` from the
+   [libvirtualgamepad releases page](https://github.com/Nonary/libvirtualgamepad/releases/latest)
+   and extract it.
+2. Open an elevated (Administrator) PowerShell window in the extracted folder and run
+   `.\install.ps1`. Reboot if prompted.
+3. In the web UI, set [gamepad](configuration.md#gamepad) to `ds5`, or leave it on `auto` — a
+   client that reports a PS5 controller is then emulated as a DualSense automatically whenever the
+   driver is installed.
+
+> [!NOTE]
+> The driver's catalog is not Authenticode-signed upstream, so Windows may warn about an
+> unrecognized publisher during installation; this is expected for this beta driver.
+
+ViGEmBus remains the default and the fallback: if the libvirtualgamepad driver is not installed,
+or fails to create a controller, `ds5` falls back to a ViGEmBus DualShock 4 automatically.
+
 ## Usage
 
 ### Basic usage
