@@ -153,7 +153,8 @@ jobs:
 
   build-linux-copr:
     name: Linux Copr
-    if: github.event_name != 'push'  # releases are handled directly in ci-copr.yml
+    # releases are handled directly in ci-copr.yml; Copr targets LizardByte's account, so skip on forks
+    if: github.event_name != 'push' && startsWith(github.repository, 'LizardByte/')
     needs: release-setup
     permissions:
       contents: write  # needed to update releases
