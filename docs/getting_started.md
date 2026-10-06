@@ -532,21 +532,34 @@ recommended to restart your computer.
 #### DualSense on Windows
 ViGEmBus can emulate an Xbox 360 or DualShock 4 controller, but it has no DualSense (PS5) target
 type. To emulate a real DualSense — with touchpad, motion sensors, battery, player LEDs, rumble,
-and adaptive triggers — install the free, MIT-licensed
-[libvirtualgamepad](https://github.com/Nonary/libvirtualgamepad) driver by Nonary instead:
+and adaptive triggers — Jochona Host can use the free, MIT-licensed
+[libvirtualgamepad](https://github.com/Nonary/libvirtualgamepad) driver by Nonary instead.
+
+> [!CAUTION]
+> This is an advanced, experimental path. Jochona Host's installer does **not** bundle, sign, or
+> install this driver. The driver project's own published release packages are intentionally
+> [unsigned for consumer signing](https://github.com/Nonary/libvirtualgamepad#driver-package-and-signing)
+> — nothing in that ZIP will load on a stock Windows install as-is. There is no `install.ps1` or
+> similar one-step installer; follow libvirtualgamepad's own signing/trust documentation.
 
 1. Download the latest `libvirtualgamepad-*-windows-x64.zip` from the
    [libvirtualgamepad releases page](https://github.com/Nonary/libvirtualgamepad/releases/latest)
-   and extract it.
-2. Open an elevated (Administrator) PowerShell window in the extracted folder and run
-   `.\install.ps1`. Reboot if prompted.
-3. In the web UI, set [gamepad](configuration.md#gamepad) to `ds5`, or leave it on `auto` — a
+   and extract it, or clone/build [the source](https://github.com/Nonary/libvirtualgamepad)
+   yourself. The package contains `driver/VibeshineVhfGamepad.{inf,dll,cat}`,
+   `tools/VibeshineVhfGamepadDeviceSetup.exe`, and `manifest.json` — all unsigned.
+2. Sign or trust the package per libvirtualgamepad's
+   ["Driver package and signing"](https://github.com/Nonary/libvirtualgamepad#driver-package-and-signing)
+   docs. There is no officially distributed, pre-signed build yet; the documented path today is
+   building a local test-signed copy yourself from source: run
+   `tools\build-driver.ps1 -Platform x64` from a libvirtualgamepad checkout, then (elevated)
+   `tools\trust-test-certificate.ps1 -PackageDir <staged-package-dir>` to trust the generated test
+   certificate on the machine that will run the driver.
+3. From an elevated (Administrator) PowerShell window, run the setup tool against the trusted
+   package's INF: `tools\VibeshineVhfGamepadDeviceSetup.exe install --inf
+   driver\VibeshineVhfGamepad.inf`. Reboot if the tool reports it's required.
+4. In the web UI, set [gamepad](configuration.md#gamepad) to `ds5`, or leave it on `auto` — a
    client that reports a PS5 controller is then emulated as a DualSense automatically whenever the
    driver is installed.
-
-> [!NOTE]
-> The driver's catalog is not Authenticode-signed upstream, so Windows may warn about an
-> unrecognized publisher during installation; this is expected for this beta driver.
 
 ViGEmBus remains the default and the fallback: if the libvirtualgamepad driver is not installed,
 or fails to create a controller, `ds5` falls back to a ViGEmBus DualShock 4 automatically.

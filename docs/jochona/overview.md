@@ -33,12 +33,14 @@ capacity, so physical-display capture keeps working when the adapter is absent o
 [Jochona Display Adapter](https://github.com/Jochona/jochona-display-adapter) for the driver itself and its own
 protocol v1.0 contract.
 
-## Gamepads, including DualSense on Windows
+## Gamepads, including an experimental DualSense backend on Windows
 
 Baseline Sunshine already emulates a DualShock/DualSense-class controller on Linux (via `inputtino`). On Windows,
-Jochona Host adds a real DualSense (DS5) backend — touchpad, motion, battery, player LEDs, rumble, and adaptive
-triggers — through the free, MIT-licensed [libvirtualgamepad](https://github.com/Nonary/libvirtualgamepad) VHF
-driver. See [`docs/gamepads.md`](../gamepads.md) for the full platform/backend matrix and configuration.
+Jochona Host can optionally use a real DualSense (DS5) backend — touchpad, motion, battery, player LEDs, rumble,
+and adaptive triggers — through the free, MIT-licensed [libvirtualgamepad](https://github.com/Nonary/libvirtualgamepad)
+VHF driver. This backend is experimental and advanced: it is not bundled, signed, or installed by Jochona Host, and
+ViGEmBus remains the default, supported Windows gamepad backend. See [`docs/gamepads.md`](../gamepads.md) for the
+full platform/backend matrix, install story, and configuration.
 
 ## Host Volume
 
