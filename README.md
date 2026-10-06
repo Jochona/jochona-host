@@ -26,9 +26,10 @@
 
 This repository is **Jochona Host**, a fork of [LizardByte/Sunshine](https://github.com/LizardByte/Sunshine). It is fully baseline-GameStream compatible with any Moonlight client: every Jochona extension is additive and optional, and a client that never sends a Jochona-specific parameter gets exactly Sunshine's stock behavior. Badges, releases, and links above point at upstream LizardByte/Sunshine project infrastructure (stars, CI, downloads); Jochona Host is not itself published through those upstream release channels — see [Jochona Host Install](docs/getting_started.md#jochona-host-install) for how to actually get it running (GitHub Actions CI build artifacts, or build from source).
 
-On top of that baseline, Jochona Host is developing in-progress extensions: an authenticated capability manifest (`GET /jochona/v1/capabilities`), exact per-combination Encoder Tuple proof and a bootstrap preflight probe, a Windows Virtual Display Adapter lease lifecycle, Host Volume control, and Beacon-style observer-only pairing. These are tracked as **Unreleased** in the [changelog](docs/changelog.md) and are under active development, not a finished v1.0.
+On top of that baseline, Jochona Host adds: an authenticated capability manifest (`GET /jochona/v1/capabilities`), exact per-combination Encoder Tuple proof and a bootstrap preflight probe, a Windows Virtual Display Adapter lease lifecycle (paired with [Jochona Display Adapter](https://github.com/Jochona/jochona-display-adapter)), a real Windows [DualSense (DS5) virtual gamepad backend](docs/gamepads.md), Host Volume control, and Beacon-style observer-only pairing. These ship as Jochona Host **1.0.0** — see the [changelog](docs/changelog.md) for the full list and [`docs/jochona/overview.md`](docs/jochona/overview.md) for what Jochona Host is and how it differs from upstream Sunshine.
 
-The authoritative specification for these extensions is [`docs/protocols/jochona-host-capabilities.md`](https://github.com/Jochona/jochona-host/blob/main/docs/protocols/jochona-host-capabilities.md); it takes precedence over this README for anything Jochona-specific. All upstream Sunshine documentation below remains accurate for baseline GameStream behavior.
+The authoritative specification for these extensions is [`docs/protocols/jochona-host-capabilities.md`](https://github.com/Jochona/jochona-host/blob/main/docs/protocols/jochona-host-capabilities.md); it takes precedence over this README for anything Jochona-specific. All upstream Sunshine documentation below remains accurate for baseline GameStream behavior. For the end-to-end picture across every Jochona repository (Client, Display Adapter, Beacon) and the planned owner-hosted [Constellation](https://github.com/Jochona/jochona-constellation) management plane, see the [1.0 plan](https://github.com/Jochona/jochona-constellation/blob/main/docs/plan-1.0.md) and the [cross-repo getting-started walkthrough](https://github.com/Jochona/jochona-constellation#getting-started-windows-host--bazzite-client).
+
 
 ## ℹ️ About
 
@@ -72,7 +73,7 @@ LizardByte has the full documentation hosted on [Read the Docs](https://docs.liz
         <td>❌</td>
         <td>✅</td>
         <td>❌</td>
-        <td>❌</td>
+        <td>🟡<sup><a href="docs/gamepads.md">?</a></sup></td>
     </tr>
     <tr>
         <td>Nintendo Switch Pro</td>
@@ -486,6 +487,13 @@ LizardByte has the full documentation hosted on [Read the Docs](https://docs.liz
         <td>Client: CAT5e ethernet or better</td>
     </tr>
 </table>
+
+## 📜 License
+
+Jochona Host is GPL-3.0, the same as upstream Sunshine; see [`LICENSE`](LICENSE). The Windows DualSense (DS5) backend
+links the free, MIT-licensed [libvirtualgamepad](https://github.com/Nonary/libvirtualgamepad) VHF client library;
+see [`NOTICE`](NOTICE) for the full third-party attribution list and [`docs/legal.md`](docs/legal.md) for commercial-use
+notes (GPL-3.0 does not itself grant rights to the proprietary codecs/encoders Jochona Host can call into).
 
 ## ❓ Support
 

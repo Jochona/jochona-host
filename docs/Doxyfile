@@ -39,6 +39,8 @@ PREDEFINED += SUNSHINE_TRAY=1
 USE_MDFILE_AS_MAINPAGE = ../README.md
 INPUT = ../README.md \
         getting_started.md \
+        jochona/overview.md \
+        gamepads.md \
         changelog.md \
         ../DOCKER_README.md \
         third_party_packages.md \

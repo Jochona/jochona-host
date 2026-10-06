@@ -1,6 +1,6 @@
 # Changelog
 
-## Jochona Host — Unreleased
+## Jochona Host — 1.0.0
 
 Jochona Host's own changes, tracked separately from upstream Sunshine's release history embedded below.
 
@@ -14,6 +14,7 @@ Jochona Host's own changes, tracked separately from upstream Sunshine's release 
 - **Sensitive request logging**: GameStream session keys, pairing material, certificates, stable Client identifiers, cookies, and authorization headers are redacted before request diagnostics reach Host logs.
 - **Baseline compatibility**: every Jochona extension is additive and optional; a client that never sends a Jochona-specific parameter gets exactly Sunshine's baseline GameStream behavior.
 - **CI fixes for the fork**: `ci.yml`'s push trigger now watches `main` instead of upstream's `master` (this fork's default branch), so push-triggered builds actually run; `release-setup` forces `publish_release=false` outside of `LizardByte/` repositories so this fork never attempts to publish a GitHub release or notarize macOS builds without LizardByte's secrets; `localize` and `update-pages` (GH-Pages) are gated to `LizardByte/` repositories only, since they need Crowdin/`GH_BOT_TOKEN` and GitHub Pages this fork doesn't have. See [Building > CI on this fork](building.md#ci-on-this-fork) for details. `_codeql.yml` is centrally managed upstream and still references `master`; left unmodified.
+- **Strict Doxygen build**: the documentation site (`docs/Doxyfile`) builds with zero warnings under the same strict configuration CI enforces — no bare HTML-like tags outside backticks, no dangling `\ref`/`\sa` targets, every Markdown doc wired into `INPUT`.
 - **Windows DualSense (DS5) virtual gamepad backend**: `gamepad = ds5` (or `auto`, for a client that reports a PS5 controller) emulates a real DualSense — touchpad, motion, battery, player LEDs, rumble, and adaptive triggers — through the free, MIT-licensed [libvirtualgamepad](https://github.com/Nonary/libvirtualgamepad) VHF driver, ported from [Vibepollo](https://github.com/Nonary/Vibepollo); ViGEmBus remains the default backend and the automatic fallback when the VHF driver is not installed or fails to create a controller. See [Getting Started > DualSense on Windows](getting_started.md#dualsense-on-windows) for driver installation.
 
 @htmlonly
