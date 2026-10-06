@@ -7,7 +7,19 @@ on:
   push:
     branches:
       - main
+    tags:
+      - 'v*'
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version for this run (e.g. 1.0.0); defaults to a dry-run placeholder on this fork'
+        required: false
+        type: string
+      publish:
+        description: 'Create a real GitHub Release for this run (fork only; no effect on LizardByte/)'
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: "${{ github.workflow }}-${{ github.ref }}"
@@ -26,12 +38,27 @@ jobs:
       # Jochona: this fork has no Apple/Azure signing certs or bot tokens, so it never publishes through
       # LizardByte infrastructure; force publish_release=false outside LizardByte/ (matches `release` job gate).
       publish_release: ${{ startsWith(github.repository, 'LizardByte/') && steps.release-setup.outputs.publish_release || 'false' }}
-      release_body: ${{ steps.release-setup.outputs.release_body || steps.manual.outputs.release_body }}
-      release_commit: ${{ steps.release-setup.outputs.release_commit || steps.manual.outputs.release_commit }}
+      release_body: >-
+        ${{ steps.release-setup.outputs.release_body || steps.manual.outputs.release_body || steps.tag.outputs.release_body }}
+      release_commit: >-
+        ${{
+          steps.release-setup.outputs.release_commit || steps.manual.outputs.release_commit || steps.tag.outputs.release_commit
+        }}
       release_generate_release_notes: >-
-        ${{ steps.release-setup.outputs.release_generate_release_notes || steps.manual.outputs.release_generate_release_notes }}
-      release_tag: ${{ steps.release-setup.outputs.release_tag || steps.manual.outputs.release_tag }}
-      release_version: ${{ steps.release-setup.outputs.release_version || steps.manual.outputs.release_version }}
+        ${{
+          steps.release-setup.outputs.release_generate_release_notes ||
+          steps.manual.outputs.release_generate_release_notes ||
+          steps.tag.outputs.release_generate_release_notes
+        }}
+      release_tag: >-
+        ${{ steps.release-setup.outputs.release_tag || steps.manual.outputs.release_tag || steps.tag.outputs.release_tag }}
+      release_version: >-
+        ${{
+          steps.release-setup.outputs.release_version || steps.manual.outputs.release_version || steps.tag.outputs.release_version
+        }}
+      # Jochona: gates the fork-owned `fork-release` job below. Kept separate from `publish_release`, which stays
+      # forced false on this fork so no signing/notarization/Homebrew/Docker publishing is ever attempted.
+      fork_release: ${{ steps.fork-release-gate.outputs.fork_release }}
     permissions:
       contents: write
     runs-on: ubuntu-latest
@@ -40,10 +67,11 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       # Jochona: LizardByte's release_setup only understands push/pull_request payloads (reads event["commits"]),
-      # and crashes with KeyError on workflow_dispatch. Manual runs get local, non-publishing metadata instead.
+      # and crashes with KeyError on workflow_dispatch, or IndexError on tag pushes (which carry zero new commits).
+      # Manual runs and tag pushes get local, non-publishing metadata instead.
       - name: Release Setup
         id: release-setup
-        if: github.event_name != 'workflow_dispatch'
+        if: github.event_name != 'workflow_dispatch' && !startsWith(github.ref, 'refs/tags/')
         uses: LizardByte/actions/actions/release_setup@d0ae7f82215a479fe2b74f4088c53ee6460513dd  # v2026.728.214955
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -52,16 +80,51 @@ jobs:
         id: manual
         if: github.event_name == 'workflow_dispatch'
         env:
+          INPUT_VERSION: ${{ inputs.version }}
           RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          VERSION="${INPUT_VERSION:-0.0.${RUN_NUMBER}}"
+          {
+            echo "publish_release=false"
+            echo "release_body="
+            echo "release_commit=${GITHUB_SHA}"
+            echo "release_generate_release_notes=false"
+            echo "release_tag=v${VERSION}"
+            echo "release_version=${VERSION}"
+          } >> "${GITHUB_OUTPUT}"
+
+      # Jochona: a `v*` tag push carries the real release version; derive metadata from the tag itself instead of
+      # LizardByte's calver release_setup action (see comment above).
+      - name: Release Setup (tag push)
+        id: tag
+        if: startsWith(github.ref, 'refs/tags/')
         run: |
           {
             echo "publish_release=false"
             echo "release_body="
             echo "release_commit=${GITHUB_SHA}"
             echo "release_generate_release_notes=false"
-            echo "release_tag=v0.0.${RUN_NUMBER}"
-            echo "release_version=0.0.${RUN_NUMBER}"
+            echo "release_tag=${GITHUB_REF_NAME}"
+            echo "release_version=${GITHUB_REF_NAME#v}"
           } >> "${GITHUB_OUTPUT}"
+
+      # Jochona: decide whether the fork-owned `fork-release` job should publish a GitHub Release. Real `v*` tag
+      # pushes always do; workflow_dispatch only does when explicitly asked via the `publish` input (so manual
+      # runs default to a safe dry run). Never runs in LizardByte/, which uses its own `release` job instead.
+      - name: Fork Release Gate
+        id: fork-release-gate
+        env:
+          DISPATCH_PUBLISH: ${{ inputs.publish }}
+        run: |
+          fork_release="false"
+          if [[ "${GITHUB_REPOSITORY}" != LizardByte/* ]]; then
+            if [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == refs/tags/v* ]]; then
+              fork_release="true"
+            elif [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${DISPATCH_PUBLISH}" == "true" ]]; then
+              fork_release="true"
+            fi
+          fi
+          echo "fork_release=${fork_release}" >> "${GITHUB_OUTPUT}"
 
   build-docker:
     name: Docker
@@ -349,6 +412,53 @@ jobs:
           tag: ${{ needs.release-setup.outputs.release_tag }}
           token: ${{ secrets.GH_BOT_TOKEN }}
           virustotal_api_key: ${{ secrets.VIRUSTOTAL_API_KEY }}
+
+  fork-release:
+    name: Fork Release
+    # Jochona: fork-owned release job (separate from the LizardByte-gated `release` job above). Intentionally
+    # does not depend on build-freebsd (FreeBSD aarch64 can take 1h+) or build-archlinux/build-docker/
+    # build-homebrew (not part of this fork's release assets) so those never block publishing.
+    if: needs.release-setup.outputs.fork_release == 'true'
+    needs:
+      - release-setup
+      - build-windows
+      - build-macos
+      - build-linux
+      - build-linux-flatpak
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          path: artifacts
+          pattern: build-*
+          merge-multiple: true
+
+      - name: Prune non-release artifacts
+        working-directory: artifacts
+        run: |
+          # debug symbols and the flatpak debug/source bundles aren't release-facing assets
+          rm -f ./*-debuginfo.7z ./sunshine_debug_*.flatpak ./flathub.tar.gz
+          ls -l .
+
+      - name: Generate checksums
+        working-directory: artifacts
+        run: sha256sum -- * > SHA256SUMS
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.release-setup.outputs.release_tag }}
+          RELEASE_COMMIT: ${{ needs.release-setup.outputs.release_commit }}
+        run: |
+          gh release create "${RELEASE_TAG}" artifacts/* \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "${RELEASE_TAG}" \
+            --target "${RELEASE_COMMIT}" \
+            --notes "Unsigned binaries; install instructions: docs/getting_started.md" \
+            --generate-notes
 
   release-homebrew-beta:
     name: Release Homebrew Beta
