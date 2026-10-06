@@ -439,8 +439,16 @@ jobs:
       - name: Prune non-release artifacts
         working-directory: artifacts
         run: |
-          # debug symbols and the flatpak debug/source bundles aren't release-facing assets
-          rm -f ./*-debuginfo.7z ./sunshine_debug_*.flatpak ./flathub.tar.gz
+          # `download-artifact`'s `pattern: build-*` match isn't scoped by this job's `needs`: it downloads
+          # every `build-*` artifact already uploaded by the time this job starts, so a fast FreeBSD/Archlinux
+          # leg can sneak in. Allowlist the exact fork-release assets instead of denylisting unwanted ones.
+          keep_regex='^(Sunshine-Windows-(AMD64|ARM64)-(installer\.msi|lite\.zip)|Sunshine-macOS-(arm64|x86_64)\.dmg|sunshine\.AppImage|sunshine_(x86_64|aarch64)\.flatpak)$'
+          for f in *; do
+            if [[ ! "${f}" =~ ${keep_regex} ]]; then
+              echo "dropping non-release artifact: ${f}"
+              rm -f -- "${f}"
+            fi
+          done
           ls -l .
 
       - name: Generate checksums
