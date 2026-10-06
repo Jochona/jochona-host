@@ -265,25 +265,46 @@ It may be beneficial to build remotely in some cases. This will enable easier bu
 
 ## CI on this fork
 
-Jochona Host's GitHub Actions CI (`.github/workflows/ci.yml`) runs on push to `main`, on pull requests, and via
-`workflow_dispatch`. The vendored LizardByte `release_setup` action only understands push and pull-request payloads
-(it reads the push event's `commits`) and fails with `KeyError: 'commits'` on manual runs, so `ci.yml` skips it for
-`workflow_dispatch` and generates local, non-publishing metadata instead (`publish_release=false`, version
-`0.0.N`, N = run number).
+Jochona Host's GitHub Actions CI (`.github/workflows/ci.yml`) runs on push to `main`, on pull requests, on push of
+a `v*` tag, and via `workflow_dispatch`. The vendored LizardByte `release_setup` action only understands push and
+pull-request payloads (it reads the push event's `commits`) and fails with `KeyError: 'commits'` on manual runs,
+or `IndexError` on tag pushes (which carry no new commits), so `ci.yml` skips it for `workflow_dispatch` and `v*`
+tag pushes and generates local, non-publishing metadata instead.
 
 This fork has none of LizardByte's signing/publishing secrets, so `release-setup` forces `publish_release=false`
 outside of `LizardByte/` repositories. That has a few effects on this fork:
 
-- The `release` job (which requires `publish_release == 'true'`) never runs, so CI never attempts to publish a
-  GitHub release.
+- The LizardByte-gated `release` job (which requires `publish_release == 'true'`) never runs, so CI never attempts
+  to publish through LizardByte's own release channel.
 - The `localize` and GH-Pages (`update-pages.yml`) workflows gate independently on
   `startsWith(github.repository, 'LizardByte/')` and are skipped here too — they need Crowdin/`GH_BOT_TOKEN` and
   GitHub Pages, neither of which this fork has configured.
-- The macOS build job only imports and uses Apple signing/notarization secrets (`APPLE_*`) when
-  `publish_release == 'true'`; with it forced false, the macOS job builds unsigned and does not need those secrets.
+- The macOS and Windows build jobs only use Apple/Azure signing secrets when `publish_release == 'true'`; with it
+  forced false, those jobs build unsigned and don't need those secrets.
 
-To get build artifacts, push to `main` or open a pull request and download the per-platform artifacts from the
-workflow run summary (see [Remote Build](#remote-build) above).
+### Cutting a release
+
+A fork-owned `fork-release` job (separate from the LizardByte-only `release` job above) publishes a real GitHub
+Release when a `v*` tag is pushed:
+
+```sh
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+This triggers `ci.yml`, builds Windows (AMD64 + ARM64), macOS (arm64 + x86_64), Linux AppImage, and Linux Flatpak
+(x86_64 + aarch64), then `fork-release` downloads those artifacts, writes a `SHA256SUMS` file, and creates a
+GitHub Release on the tag with everything attached — all unsigned. `build-freebsd`, `build-archlinux`,
+`build-docker`, and `build-homebrew` are intentionally left out of `fork-release`'s dependencies, so a slow leg
+(FreeBSD aarch64 can take over an hour) or an upstream-only job never blocks publishing. The current pipeline
+does not produce a `.deb`; only the packages `ci-linux.yml`/`ci-flatpak.yml` already build are published.
+
+To dry-run the full build matrix without creating a release, trigger `workflow_dispatch` with the `publish` input
+left at its default (`false`). Pass `publish: true` with an explicit `version` to publish a release from a manual
+run instead of a tag push.
+
+To get build artifacts without cutting a release, push to `main` or open a pull request and download the
+per-platform artifacts from the workflow run summary (see [Remote Build](#remote-build) above).
 
 <div class="section_buttons">
 

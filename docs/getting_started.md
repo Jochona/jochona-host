@@ -1,34 +1,41 @@
 # Getting Started
 
 > [!IMPORTANT]
-> Jochona Host has no stable releases and is not published through LizardByte's upstream release channels (GitHub
-> Releases, Flathub, Copr, winget, Homebrew, etc.). See [Jochona Host Install](#jochona-host-install) below for how
-> to actually get Jochona Host running. Everything under [Binaries](#binaries) and [Install](#install) further down
-> describes **upstream Sunshine's** package channels and does not apply to Jochona Host.
+> Jochona Host is not published through LizardByte's upstream release channels (Flathub, Copr, winget, Homebrew,
+> etc.). See [Jochona Host Install](#jochona-host-install) below for how to actually get Jochona Host running.
+> Everything under [Binaries](#binaries) and [Install](#install) further down describes **upstream Sunshine's**
+> package channels and does not apply to Jochona Host.
 
 ## Jochona Host Install
 
-Jochona Host ships only as
-[GitHub Actions CI build artifacts](https://github.com/Jochona/jochona-host/actions/workflows/ci.yml); there are no
-GitHub Releases, Flathub, Copr, winget, or Homebrew packages for it.
+Jochona Host publishes
+[GitHub Releases](https://github.com/Jochona/jochona-host/releases/latest) on this repo for tagged versions, plus
+[CI build artifacts](https://github.com/Jochona/jochona-host/actions/workflows/ci.yml) for every push to `main`
+and pull request. There are no Flathub, Copr, winget, or Homebrew packages — use one of the two sources above
+instead.
 
 ### Windows (primary target)
 
-**Option A: Download a CI build**
+**Option A: Download a release**
+1. Download `Sunshine-Windows-AMD64-installer.msi` (or `-lite.zip` for a portable build) from the
+   [latest release](https://github.com/Jochona/jochona-host/releases/latest). ARM64 devices use the
+   `Windows-ARM64` assets instead.
+2. Run the installer, or unzip the portable build and run `sunshine.exe` directly.
+
+**Option B: Download a CI build**
 1. Open a successful run of the `CI` workflow on `main` at the
    [Jochona/jochona-host Actions tab](https://github.com/Jochona/jochona-host/actions/workflows/ci.yml).
-   You can start this workflow manually (`gh workflow run ci.yml --repo Jochona/jochona-host --ref main`) or use a
-   run triggered by a push or pull request.
-2. Download the Windows build artifact (NSIS installer, WiX installer, or portable ZIP) from the run summary.
+2. Download the Windows build artifact (WiX `.msi` installer or portable `.zip`) from the run summary.
 3. Run the installer, or unzip the portable build and run `sunshine.exe` directly.
 
-**Option B: Build locally with MSYS2**
+**Option C: Build locally with MSYS2**
 Follow [Building > Windows](building.md#windows) to install MSYS2/UCRT64 dependencies, then clone, build, and
-package with `cpack -G NSIS` (installer), `cpack -G WIX` (installer), or `cpack -G ZIP` (portable).
+package with `cpack -G WIX` (installer) or `cpack -G ZIP` (portable).
 
 ### Linux and macOS
 
-No prebuilt Jochona Host packages exist for Linux or macOS. Download the matching build artifact from a
+Download the matching `.dmg` (macOS), `.AppImage`, or `.flatpak` asset from the
+[latest release](https://github.com/Jochona/jochona-host/releases/latest) or a
 [CI run](https://github.com/Jochona/jochona-host/actions/workflows/ci.yml), or build from source following
 [Building > Linux](building.md#linux) or [Building > macOS](building.md#macos).
 
@@ -36,6 +43,11 @@ No prebuilt Jochona Host packages exist for Linux or macOS. Download the matchin
 > Jochona targets a Windows desktop running Host paired with a Bazzite living-room PC running Jochona Client.
 > Linux/macOS Host builds work through the underlying Sunshine code but are not the focus of Jochona-specific
 > testing.
+
+> [!WARNING]
+> All Jochona Host binaries are unsigned. On Windows, SmartScreen will warn before you run the installer; on
+> macOS, Gatekeeper will block the unsigned app until you right-click and choose "Open", or run
+> `xattr -cr /Applications/Sunshine.app`.
 
 ---
 
