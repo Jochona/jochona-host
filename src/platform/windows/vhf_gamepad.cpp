@@ -17,7 +17,6 @@
 #include <array>
 #include <atomic>
 #include <chrono>
-#include <condition_variable>
 #include <map>
 #include <mutex>
 #include <shared_mutex>
@@ -239,8 +238,7 @@ namespace platf {
     bool probed {false};  ///< Whether `probe()` has run.
     bool driver_available {false};  ///< Result of the last `probe()`.
 
-    std::mutex wake_mutex;  ///< Guards `wake`.
-    std::condition_variable wake;  ///< Wakes the feedback thread on slot activity or shutdown.
+    vhf_gamepad::wake_gate wake;  ///< Serializes `active_count`/`stopping` mutation with the feedback thread's wait.
     std::thread feedback_thread;  ///< Polls the driver for feedback events.
 
     /**
@@ -311,18 +309,15 @@ namespace platf {
 
   void vhf_gamepad_t::impl_t::feedback_loop() {
     while (!stopping.load(std::memory_order_acquire)) {
-      {
-        std::unique_lock wake_lock {wake_mutex};
-        if (active_count.load(std::memory_order_acquire) == 0) {
-          wake.wait(wake_lock, [this] {
-            return stopping.load(std::memory_order_acquire) ||
-                   active_count.load(std::memory_order_acquire) > 0;
-          });
-        } else {
-          wake.wait_for(wake_lock, k_feedback_poll_interval, [this] {
-            return stopping.load(std::memory_order_acquire);
-          });
-        }
+      if (active_count.load(std::memory_order_acquire) == 0) {
+        wake.wait([this] {
+          return stopping.load(std::memory_order_acquire) ||
+                 active_count.load(std::memory_order_acquire) > 0;
+        });
+      } else {
+        wake.wait_for(k_feedback_poll_interval, [this] {
+          return stopping.load(std::memory_order_acquire);
+        });
       }
 
       if (stopping.load(std::memory_order_acquire)) {
@@ -364,8 +359,9 @@ namespace platf {
   }
 
   vhf_gamepad_t::~vhf_gamepad_t() {
-    impl->stopping.store(true, std::memory_order_release);
-    impl->wake.notify_all();
+    impl->wake.notify_all([&] {
+      impl->stopping.store(true, std::memory_order_release);
+    });
     if (impl->feedback_thread.joinable()) {
       impl->feedback_thread.join();
     }
@@ -382,6 +378,8 @@ namespace platf {
       }
       impl->client.close();
     }
+    // feedback_thread has already joined, so no waiter can observe this: the wake_gate discipline
+    // above only matters while that thread could still be checking its predicate.
     impl->active_count.store(0, std::memory_order_release);
   }
 
@@ -490,7 +488,6 @@ namespace platf {
     slot.profile = profile;
     slot.client_relative_index = id.clientRelativeIndex;
     slot.feedback_queue = std::move(feedback_queue);
-    impl->active_count.fetch_add(1, std::memory_order_acq_rel);
 
     if (has_motion(profile) && slot.feedback_queue) {
       // The client only streams motion when asked. Without this a PlayStation
@@ -504,7 +501,9 @@ namespace platf {
         impl->feedback_loop();
       }};
     }
-    impl->wake.notify_all();
+    impl->wake.notify_all([this] {
+      impl->active_count.fetch_add(1, std::memory_order_acq_rel);
+    });
 
     BOOST_LOG(info) << "VHF gamepad "sv << id.globalIndex << " created as "sv
                     << describe_profile(profile);
@@ -529,7 +528,14 @@ namespace platf {
     }
 
     slot.reset();
-    if (impl->active_count.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+    // No waiter blocks on active_count *decreasing*, so this notify is not load-bearing for
+    // correctness — but routing the mutation through the gate keeps every active_count write on
+    // the same disciplined path instead of leaving one direct atomic write for the next change to
+    // copy by accident.
+    const unsigned previous = impl->wake.notify_all([this] {
+      return impl->active_count.fetch_sub(1, std::memory_order_acq_rel);
+    });
+    if (previous == 1) {
       BOOST_LOG(debug) << "Disconnecting from the VHF virtual gamepad driver"sv;
       impl->client.close();
     }

@@ -12,6 +12,9 @@
 // lib includes
 #include <libvirtualgamepad/protocol.h>
 
+// local includes
+#include "vhf_gamepad_wake_gate.h"
+
 namespace platf::vhf_gamepad {
 
   /**
