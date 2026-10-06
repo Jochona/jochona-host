@@ -269,7 +269,7 @@ Jochona Host's GitHub Actions CI (`.github/workflows/ci.yml`) runs on push to `m
 `workflow_dispatch`. The vendored LizardByte `release_setup` action only understands push and pull-request payloads
 (it reads the push event's `commits`) and fails with `KeyError: 'commits'` on manual runs, so `ci.yml` skips it for
 `workflow_dispatch` and generates local, non-publishing metadata instead (`publish_release=false`, version
-`0.0.<run number>`).
+`0.0.N`, N = run number).
 
 This fork has none of LizardByte's signing/publishing secrets, so `release-setup` forces `publish_release=false`
 outside of `LizardByte/` repositories. That has a few effects on this fork:
